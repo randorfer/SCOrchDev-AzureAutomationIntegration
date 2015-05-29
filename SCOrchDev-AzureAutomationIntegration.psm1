@@ -608,3 +608,49 @@ Function Remove-SmaOrphanRunbook
     }
     Write-Verbose -Message "Finished [$WorkflowCommandName]"
 }
+
+<#
+    .SYNOPSIS
+    Returns $true if working in a local development environment, $false otherwise.
+#>
+function Test-LocalDevelopment
+{
+    $LocalDevModule = Get-Module -ListAvailable -Name 'LocalDev' -Verbose:$False -ErrorAction 'SilentlyContinue' -WarningAction 'SilentlyContinue'
+    if($LocalDevModule -ne $Null)
+    {
+        return $True
+    }
+    return $False
+}
+
+Function Get-BatchAutomationVariable
+{
+    Param(
+        [Parameter(Mandatory = $True)]
+        [String[]]
+        $Name,
+
+        [Parameter(Mandatory = $False)]
+        [AllowNull()]
+        [String]
+        $Prefix = $Null
+    )
+    $Variables = @{}
+    $VarCommand = (Get-Command -Name 'Get-SMAVariable')
+    
+    ForEach($VarName in $Name)
+    {
+        If(-not [String]::IsNullOrEmpty($Prefix))
+        {
+            $VarName = "$Prefix-$VarName"
+        }
+        Else
+        {
+            $VarName = $VarName
+        }
+        $Variables[$VarName] = (Get-AutomationVariable -Name $VarName).Value
+        Write-Verbose -Message "Variable [$VarName / $SMAVarName] = [$($Variables[$VarName])]"
+    }
+    Return (New-Object -TypeName 'PSObject' -Property $Variables)
+}
+Export-ModuleMember -Function * -Verbose:$false
