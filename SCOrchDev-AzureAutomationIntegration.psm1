@@ -636,19 +636,18 @@ Function Get-BatchAutomationVariable
         $Prefix = $Null
     )
     $Variables = @{}
-    $VarCommand = (Get-Command -Name 'Get-SMAVariable')
     
     ForEach($VarName in $Name)
     {
         If(-not [String]::IsNullOrEmpty($Prefix))
         {
-            $VarName = "$Prefix-$VarName"
+            $Variables[$VarName] = (Get-AutomationVariable -Name "$Prefix-$VarName").Value
         }
         Else
         {
-            $VarName = $VarName
+            $Variables[$VarName] = (Get-AutomationVariable -Name $VarName).Value
         }
-        $Variables[$VarName] = (Get-AutomationVariable -Name $VarName).Value
+        
         Write-Verbose -Message "Variable [$VarName / $SMAVarName] = [$($Variables[$VarName])]"
     }
     Return (New-Object -TypeName 'PSObject' -Property $Variables)
