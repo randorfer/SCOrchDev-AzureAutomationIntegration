@@ -652,4 +652,15 @@ Function Get-BatchAutomationVariable
     }
     Return (New-Object -TypeName 'PSObject' -Property $Variables)
 }
+
+Function Get-AzureAutomationHybridRunbookWorker
+{
+    Param(
+        [Parameter(Mandatory = $True)]
+        [String[]]
+        $Name
+    )
+    
+    Return @($Env:ComputerName) -as [array]
+}
 Export-ModuleMember -Function * -Verbose:$false
