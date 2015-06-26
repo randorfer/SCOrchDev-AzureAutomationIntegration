@@ -648,11 +648,14 @@ Function Get-BatchAutomationVariable
             $Variables[$VarName] = (Get-AutomationVariable -Name $VarName).Value
         }
         
-        Write-Verbose -Message "Variable [$VarName / $SMAVarName] = [$($Variables[$VarName])]"
+        Write-Verbose -Message "Variable [$VarName / $VarName] = [$($Variables[$VarName])]"
     }
     Return (New-Object -TypeName 'PSObject' -Property $Variables)
 }
-
+<#
+.Synopsis
+    Returns a list of the runbook workers in the target hybrid runbook worker deployment.
+#>
 Function Get-AzureAutomationHybridRunbookWorker
 {
     Param(
