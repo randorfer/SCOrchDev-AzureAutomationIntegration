@@ -12,93 +12,90 @@
         The name of the repository that will be listed as the 'owner' of this
         runbook
 #>
-Function Publish-SMARunbookChange
+Function Publish-AzureAutomationRunbookChange
 {
     Param(
-        [Parameter(Mandatory=$True)]
-        [String]
+        [Parameter(Mandatory = $True)]
+        [String] 
         $FilePath,
-
-        [Parameter(Mandatory=$True)]
+        
+        [Parameter(Mandatory = $True)]
         [String]
         $CurrentCommit,
 
-        [Parameter(Mandatory=$True)]
+        [Parameter(Mandatory = $True)]
         [String]
         $RepositoryName,
 
-        [Parameter(Mandatory=$True)]
+        [Parameter(Mandatory = $True)]
         [PSCredential]
-        $Credential
+        $Credential,
+
+        [Parameter(Mandatory = $True)]
+        [String]
+        $AutomationAccountName,
+
+        [Parameter(Mandatory = $True)]
+        [String]
+        $SubscriptionName
     )
     
-    Write-Verbose -Message "[$FilePath] Starting [$WorkflowCommandName]"
+    Write-Verbose -Message "[$FilePath] Starting [Publish-AzureAutomationRunbookChange]"
     $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
-
-    $CIVariables = Get-BatchAutomationVariable -Name @(
-                                                    'WebserviceEndpoint'
-                                                    'WebservicePort'
-                                                    ) `
-                                               -Prefix 'SMAContinuousIntegration'
 
     Try
     {
-        $WorkflowName = Get-SmaWorkflowNameFromFile -FilePath $FilePath
+        Connect-AzureAutomationAccount -Credential $Credential `
+                                       -SubscriptionName $SubscriptionName `
+                                       -AutomationAccountName $AutomationAccountName
+
+        $WorkflowName = Get-WorkflowNameFromFile -FilePath $FilePath
         
         $ErrorActionPreference = [System.Management.Automation.ActionPreference]::SilentlyContinue
-        $Runbook = Get-SmaRunbook -Name $WorkflowName `
-                                  -WebServiceEndpoint $CIVariables.WebserviceEndpoint `
-                                  -Port $CIVariables.WebservicePort `
-                                  -Credential $SMACred
+        $Runbook = Get-AzureAutomationRunbook -Name $WorkflowName `
+                                              -AutomationAccountName $AutomationAccountName
         $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
 
-        if(Test-IsNullOrEmpty $Runbook.RunbookID.Guid)
-        {
-            Write-Verbose -Message "[$WorkflowName] Initial Import"
-            
-            $Runbook = Import-SmaRunbook -Path $FilePath `
-                                         -WebServiceEndpoint $CIVariables.WebserviceEndpoint `
-                                         -Port $CIVariables.WebservicePort `
-                                         -Credential $SMACred
-            
-            $TagLine = "RepositoryName:$RepositoryName;CurrentCommit:$CurrentCommit;"
-            $NewVersion = $True
-        }
-        else
+        if($Runbook -as [bool])
         {
             Write-Verbose -Message "[$WorkflowName] Update"
-            $TagUpdateJSON = New-SmaChangesetTagLine -TagLine $Runbook.Tags `
-                                                     -CurrentCommit $CurrentCommit `
-                                                     -RepositoryName $RepositoryName
+            $TagUpdateJSON = New-ChangesetTagLine -TagLine ($Runbook.Tags -join ';') `
+                                                  -CurrentCommit $CurrentCommit `
+                                                  -RepositoryName $RepositoryName
             $TagUpdate = ConvertFrom-Json $TagUpdateJSON
             $TagLine = $TagUpdate.TagLine
             $NewVersion = $TagUpdate.NewVersion
             if($NewVersion)
             {
-                $EditStatus = Edit-SmaRunbook -Overwrite `
-                                              -Path $FilePath `
-                                              -Name $WorkflowName `
-                                              -WebServiceEndpoint $CIVariables.WebserviceEndpoint `
-                                              -Port $CIVariables.WebservicePort `
-                                              -Credential $SMACred                
+                $Runbook = Set-AzureAutomationRunbookDefinition -Name $WorkflowName `
+                                                                -Path $FilePath `
+                                                                -Overwrite `
+                                                                -AutomationAccountName $AutomationAccountName
+                $TagUpdate = Set-AzureAutomationRunbook -Name $WorkflowName `
+                                                        -Tags $TagLine.Split(';') `
+                                                        -AutomationAccountName $AutomationAccountName
             }
             else
             {
                 Write-Verbose -Message "[$WorkflowName] Already is at commit [$CurrentCommit]"
             }
+
+        }
+        else
+        {
+            Write-Verbose -Message "[$WorkflowName] Initial Import"
+            
+            $TagLine = "RepositoryName:$RepositoryName;CurrentCommit:$CurrentCommit;"
+            $Runbook = New-AzureAutomationRunbook -Path $FilePath `
+                                                  -Tags $TagLine.Split(';') `
+                                                  -AutomationAccountName $AutomationAccountName
+            
+            $NewVersion = $True
         }
         if($NewVersion)
         {
-            $PublishHolder = Publish-SmaRunbook -Name $WorkflowName `
-                                                -WebServiceEndpoint $CIVariables.WebserviceEndpoint `
-                                                -Port $CIVariables.WebservicePort `
-                                                -Credential $SMACred
-
-            Set-SmaRunbookTags -RunbookID $Runbook.RunbookID.Guid `
-                               -Tags $TagLine `
-                               -WebserviceEndpoint $CIVariables.WebserviceEndpoint `
-                               -Port $CIVariables.WebservicePort `
-                               -Credential $SMACred
+            $PublishHolder = Publish-AzureAutomationRunbook -Name $WorkflowName `
+                                                            -AutomationAccountName $AutomationAccountName
         }
     }
     Catch
@@ -169,14 +166,7 @@ Function Publish-AzureAutomationSettingsFileChange
                 $AzureAutomationVariable = Get-AzureAutomationVariable -Name $VariableName `
                                                                        -AutomationAccountName $AutomationAccountName
                 $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
-                if(Test-IsNullOrEmpty -String $AzureAutomationVariable)
-                {
-                    Write-Verbose -Message "[$($VariableName)] is a New Variable"
-                    $VariableDescription = "$($Variable.Description)`n`r__RepositoryName:$($RepositoryName);CurrentCommit:$($CurrentCommit);__"
-                    $NewVersion = $True
-                    $NewVariable = $True
-                }
-                else
+                if($AzureAutomationVariable -as [bool])
                 {
                     Write-Verbose -Message "[$($VariableName)] is an existing Variable"
                     $TagUpdateJSON = New-ChangesetTagLine -TagLine $AzureAutomationVariable.Description`
@@ -186,6 +176,13 @@ Function Publish-AzureAutomationSettingsFileChange
                     $VariableDescription = "$($TagUpdate.TagLine)"
                     $NewVersion = $TagUpdate.NewVersion
                     $NewVariable = $False
+                }
+                else
+                {
+                    Write-Verbose -Message "[$($VariableName)] is a New Variable"
+                    $VariableDescription = "$($Variable.Description)`n`r__RepositoryName:$($RepositoryName);CurrentCommit:$($CurrentCommit);__"
+                    $NewVersion = $True
+                    $NewVariable = $True
                 }
                 if($NewVersion)
                 {
