@@ -120,7 +120,7 @@ Function Publish-SMARunbookChange
 .Parameter RepositoryName
     The Repository Name that will 'own' the variables and schedules
 #>
-Function Publish-SMASettingsFileChange
+Function Publish-AzureAutomationSettingsFileChange
 {
     Param( 
         [Parameter(Mandatory = $True)]
@@ -133,22 +133,32 @@ Function Publish-SMASettingsFileChange
 
         [Parameter(Mandatory = $True)]
         [String]
-        $RepositoryName
+        $RepositoryName,
+
+        [Parameter(Mandatory = $True)]
+        [PSCredential]
+        $Credential,
+
+        [Parameter(Mandatory = $True)]
+        [String]
+        $AutomationAccountName,
+
+        [Parameter(Mandatory = $True)]
+        [String]
+        $SubscriptionName
     )
     
-    Write-Verbose -Message "[$FilePath] Starting [$WorkflowCommandName]"
+    Write-Verbose -Message "[$FilePath] Starting [Publish-AzureAutomationSettingsFileChange]"
     $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
-
-    $CIVariables = Get-BatchAutomationVariable -Name @('SMACredName', 
-                                                       'WebserviceEndpoint'
-                                                       'WebservicePort') `
-                                               -Prefix 'SMAContinuousIntegration'
-    $SMACred = Get-AutomationPSCredential -Name $CIVariables.SMACredName
 
     Try
     {
-        $VariablesJSON = Get-SmaGlobalFromFile -FilePath $FilePath -GlobalType Variables
-        $Variables = ConvertFrom-PSCustomObject -InputObject (ConvertFrom-Json -InputObject $VariablesJSON)
+        Connect-AzureAutomationAccount -Credential $Credential `
+                                       -SubscriptionName $SubscriptionName `
+                                       -AutomationAccountName $AutomationAccountName
+
+        $VariablesJSON = Get-GlobalFromFile -FilePath $FilePath -GlobalType Variables
+        $Variables = $VariablesJSON | ConvertFrom-JSON | ConvertFrom-PSCustomObject
         foreach($VariableName in $Variables.Keys)
         {
             Try
@@ -156,46 +166,43 @@ Function Publish-SMASettingsFileChange
                 Write-Verbose -Message "[$VariableName] Updating"
                 $Variable = $Variables."$VariableName"
                 $ErrorActionPreference = [System.Management.Automation.ActionPreference]::SilentlyContinue
-                $SmaVariable = Get-SmaVariable -Name $VariableName `
-                                               -WebServiceEndpoint $CIVariables.WebserviceEndpoint `
-                                               -Port $CIVariables.WebservicePort `
-                                               -Credential $SMACred
+                $AzureAutomationVariable = Get-AzureAutomationVariable -Name $VariableName `
+                                                                       -AutomationAccountName $AutomationAccountName
                 $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
-                if(Test-IsNullOrEmpty -String $SmaVariable.VariableId.Guid)
+                if(Test-IsNullOrEmpty -String $AzureAutomationVariable)
                 {
                     Write-Verbose -Message "[$($VariableName)] is a New Variable"
                     $VariableDescription = "$($Variable.Description)`n`r__RepositoryName:$($RepositoryName);CurrentCommit:$($CurrentCommit);__"
                     $NewVersion = $True
+                    $NewVariable = $True
                 }
                 else
                 {
                     Write-Verbose -Message "[$($VariableName)] is an existing Variable"
-                    $TagUpdateJSON = New-SmaChangesetTagLine -TagLine $SmaVariable.Description`
-                                                             -CurrentCommit $CurrentCommit `
-                                                             -RepositoryName $RepositoryName
-                    $TagUpdate = ConvertFrom-Json -InputObject $TagUpdateJSON
+                    $TagUpdateJSON = New-ChangesetTagLine -TagLine $AzureAutomationVariable.Description`
+                                                          -CurrentCommit $CurrentCommit `
+                                                          -RepositoryName $RepositoryName
+                    $TagUpdate = $TagUpdateJSON | ConvertFrom-Json
                     $VariableDescription = "$($TagUpdate.TagLine)"
                     $NewVersion = $TagUpdate.NewVersion
+                    $NewVariable = $False
                 }
                 if($NewVersion)
                 {
-                    $SmaVariableParameters = @{
+                    $VariableParameters = @{
                         'Name' = $VariableName ;
                         'Value' = $Variable.Value ;
+                        'Encrypted' = $Variable.isEncrypted ;
                         'Description' = $VariableDescription ;
-                        'WebServiceEndpoint' = $CIVariables.WebserviceEndpoint ;
-                        'Port' = $CIVariables.WebservicePort ;
-                        'Credential' = $SMACred ;
-                        'Force' = $True ;
+                        'AutomationAccountName' = $AutomationAccountName
                     }
-                    if(ConvertTo-Boolean -InputString $Variable.isEncrypted)
+                    if($NewVariable)
                     {
-                        $CreateEncryptedVariable = Set-SmaVariable @SmaVariableParameters `
-                                                                   -Encrypted
+                        $CreateVariable = New-AzureAutomationVariable @VariableParameters
                     }
                     else
                     {
-                        $CreateEncryptedVariable = Set-SmaVariable @SmaVariableParameters
+                        $UpdateVariable = Set-AzureAutomationVariable @VariableParameters
                     }
                 }
                 else
@@ -207,7 +214,7 @@ Function Publish-SMASettingsFileChange
             Catch
             {
                 $Exception = New-Exception -Type 'VariablePublishFailure' `
-                                           -Message 'Failed to publish a variable to SMA' `
+                                           -Message 'Failed to publish a variable to Azure Automation' `
                                            -Property @{
                     'ErrorMessage' = Convert-ExceptionToString $_ ;
                     'VariableName' = $VariableName ;
@@ -215,11 +222,12 @@ Function Publish-SMASettingsFileChange
                 Write-Warning -Message $Exception -WarningAction Continue
             }
         }
-        $SchedulesJSON = Get-SmaGlobalFromFile -FilePath $FilePath -GlobalType Schedules
-        $Schedules = ConvertFrom-PSCustomObject -InputObject (ConvertFrom-Json -InputObject $SchedulesJSON)
+        $SchedulesJSON = Get-GlobalFromFile -FilePath $FilePath -GlobalType Schedules
+        $Schedules = $SchedulesJSON | ConvertFrom-JSON | ConvertFrom-PSCustomObject
         foreach($ScheduleName in $Schedules.Keys)
         {
             Write-Verbose -Message "[$ScheduleName] Updating"
+            <#
             try
             {
                 $Schedule = $Schedules."$ScheduleName"
@@ -309,6 +317,8 @@ Function Publish-SMASettingsFileChange
             {
                 Write-Exception -Exception $_ -Stream Warning
             }
+            #>
+            Write-Verbose -Message "[$($ScheduleName)] Schedules not supported yet for Azure Automation"
             Write-Verbose -Message "[$($ScheduleName)] Finished Updating"
         }
     }
@@ -316,7 +326,7 @@ Function Publish-SMASettingsFileChange
     {
         Write-Exception -Stream Warning -Exception $_
     }
-    Write-Verbose -Message "[$FilePath] Finished [$WorkflowCommandName]"
+    Write-Verbose -Message "[$FilePath] Finished [Publish-AzureAutomationSettingsFileChange]"
 }
 <#
 .Synopsis
@@ -666,4 +676,77 @@ Function Get-AzureAutomationHybridRunbookWorker
     
     Return @($Env:ComputerName) -as [array]
 }
+
+<#
+.Synopsis
+    Connects to an Azure Automation Account
+#>
+Function Connect-AzureAutomationAccount
+{
+    Param(
+        [Parameter(Mandatory = $True)]
+        [PSCredential]
+        $Credential,
+
+        [Parameter(Mandatory = $True)]
+        [string]
+        $SubscriptionName,
+
+        [Parameter(Mandatory = $True)]
+        [string]
+        $AutomationAccountName
+    )
+
+    Import-AzurePSModule
+
+    $AzureAccount = Get-AzureAccount
+    if($AzureAccount.Id -ne $Credential.UserName)
+    {
+        $AzureAccount | ForEach-Object { Remove-AzureAccount -Name $_.Id -Force }
+        Add-AzureAccount -Credential $Credential
+    }
+    
+    $AzureAccountAccessible = (Get-AzureAutomationAccount -Name $AutomationAccountName) -as [bool]
+    if(-not $AzureAccountAccessible)
+    {
+        Throw-Exception -Type 'AzureAutomationAccountNotAccessible' `
+                        -Message 'Could not access the target Azure Automation Account' `
+                        -Property @{
+                            'Credential' = $Credential ;
+                            'SubscriptionName' = $SubscriptionName ;
+                            'AutomationAccountName' = $AutomationAccountName ;
+                        }
+    }
+}
+
+<#
+.Synopsis
+    Imports the Azure PowerShell module
+#>
+Function Import-AzurePSModule
+{
+    Param(
+    )
+    $ModuleLoaded = (Get-Module 'Azure') -as [bool]
+
+    if(-not $ModuleLoaded)
+    {
+        $64BitPath = 'C:\Program Files (x86)\Microsoft SDKs\Azure\PowerShell\ServiceManagement\Azure'
+        $32BitPath = 'C:\Program Files\Microsoft SDKs\Azure\PowerShell\ServiceManagement\Azure'
+        if(Test-Path -Path $64BitPath)
+        {
+            Import-Module $64BitPath -Force
+        }
+        elseif(Test-Path -Path $32BitPath)
+        {
+            Import-Module $32BitPath -Force
+        }
+        else
+        {
+            Throw-Exception -Type 'ModuleNotFound' `
+                            -Message 'Could not load the azure module. Please install from https://github.com/Azure/azure-powershell/releases'
+        }
+    }
+}
+
 Export-ModuleMember -Function * -Verbose:$false
