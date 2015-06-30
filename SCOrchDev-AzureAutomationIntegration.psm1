@@ -79,7 +79,6 @@ Function Publish-AzureAutomationRunbookChange
             {
                 Write-Verbose -Message "[$WorkflowName] Already is at commit [$CurrentCommit]"
             }
-
         }
         else
         {
@@ -748,5 +747,109 @@ Function Import-AzurePSModule
         }
     }
 }
+<#
+.Synopsis
+    Imports a PowerShell module into Azure Automation.
+    
+.Parameter ModulePath
+    The path to the PSD1 file
 
+.Parameter Credential
+    A credential object to use for the request. If not passed this method will use
+    the default credential
+#>
+Function Publish-AzureAutomationPowerShellModule
+{
+    Param(
+        [Parameter(Mandatory = $True)]
+        [string]
+        $ModulePath,
+
+        [Parameter(Mandatory = $True)]
+        [string]
+        $SubscriptionName,
+
+        [Parameter(Mandatory = $True)]
+        [string]
+        $AutomationAccountName,
+
+        [Parameter(Mandatory = $False)]
+        [pscredential]
+        $Credential,
+
+        [Parameter(Mandatory = $True)]
+        [String]
+        $CurrentCommit,
+
+        [Parameter(Mandatory = $True)]
+        [String]
+        $RepositoryName
+    )
+    
+    Write-Verbose -Message 'Starting [Publish-AzureAutomationPowershellModule]'
+
+    $Module = Get-Item -Path $ModulePath
+    $ModuleFolderPath = $Module.Directory.FullName
+    $ModuleName = $Module.Directory.Name
+    $TempDirectory = New-TempDirectory
+
+    try
+    {
+        Connect-AzureAutomationAccount -Credential $Credential `
+                                       -SubscriptionName $SubscriptionName `
+                                       -AutomationAccountName $AutomationAccountName
+
+        $ErrorActionPreference = [System.Management.Automation.ActionPreference]::SilentlyContinue
+        $Module = Get-AzureAutomationModule -Name $ModuleName `
+                                            -AutomationAccountName $AutomationAccountName
+        $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
+
+        $ZipFile = "$($TempDirectory.FullName)\$($ModuleName).zip"
+        New-ZipFile -SourceDir $ModuleFolderPath `
+                    -ZipFilePath $ZipFile `
+                    -OverwriteExisting $True
+
+        if($Module -as [bool])
+        {
+            Write-Verbose -Message "[$ModuleName] Update"
+            $TagLine = ($Module.Tags.Keys | ForEach-Object { (@($_, $Module.Tags.$_) -join ':') } ) -join ';'
+            $TagUpdateJSON = New-ChangesetTagLine -TagLine $TagLine `
+                                                  -CurrentCommit $CurrentCommit `
+                                                  -RepositoryName $RepositoryName
+            $TagUpdate = ConvertFrom-Json $TagUpdateJSON
+            $TagLine = $TagUpdate.TagLine
+            $NewVersion = $TagUpdate.NewVersion
+            if($NewVersion)
+            {
+                $Tags = @{}
+                $TagLine -split ';' | ForEach-Object { $KVPair = $_ -split ':' ; $Tags.Add($KVPair[0], $KVPair[1]) | Out-Null }
+                $ModuleImport = Set-AzureAutomationModule -Name $ModuleName `
+                                                          -ContentLinkUri $ZipFile `
+                                                          -Tags $Tags `
+                                                          -AutomationAccountName $AutomationAccountName
+            }
+            else
+            {
+                Write-Verbose -Message "[$ModuleName] Already is at commit [$CurrentCommit]"
+            }
+        }
+        else
+        {
+            $Tags = @{
+                'CurrentCommit' = $CurrentCommit ;
+                'RepositoryName' = $RepositoryName
+            }
+            $ModuleImport = New-AzureAutomationModule -Name $ModuleName `
+                                                      -ContentLink $ZipFile `
+                                                      -AutomationAccountName $AutomationAccountName `
+                                                      -Tags $Tags
+        }
+    }
+    finally
+    {
+        Remove-Item $TempDirectory -Force -Recurse
+    }
+
+    Write-Verbose -Message 'Finished [Publish-AzureAutomationPowershellModule]'
+}
 Export-ModuleMember -Function * -Verbose:$false
