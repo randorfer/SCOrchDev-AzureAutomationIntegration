@@ -102,7 +102,7 @@ Function Publish-AzureAutomationRunbookChange
     {
         Write-Exception -Stream Warning -Exception $_
     }
-    Write-Verbose -Message "[$FilePath] Finished [$WorkflowCommandName]"
+    Write-Verbose -Message "[$FilePath] Finished [Publish-AzureAutomationRunbookChange]"
 }
 <#
 .Synopsis
