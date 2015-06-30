@@ -190,16 +190,19 @@ Function Publish-AzureAutomationSettingsFileChange
                         'Name' = $VariableName ;
                         'Value' = $Variable.Value ;
                         'Encrypted' = $Variable.isEncrypted ;
-                        'Description' = $VariableDescription ;
                         'AutomationAccountName' = $AutomationAccountName
                     }
                     if($NewVariable)
                     {
-                        $CreateVariable = New-AzureAutomationVariable @VariableParameters
+                        $CreateVariable = New-AzureAutomationVariable @VariableParameters `
+                                                                      -Description $VariableDescription
                     }
                     else
                     {
                         $UpdateVariable = Set-AzureAutomationVariable @VariableParameters
+                        $UpdateVariable = Set-AzureAutomationVariable -Name $VariableName `
+                                                                      -Description $VariableDescription `
+                                                                      -AutomationAccountName $AutomationAccountName
                     }
                 }
                 else
