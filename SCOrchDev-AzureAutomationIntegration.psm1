@@ -226,23 +226,14 @@ Function Publish-AzureAutomationSettingsFileChange
         foreach($ScheduleName in $Schedules.Keys)
         {
             Write-Verbose -Message "[$ScheduleName] Updating"
-            <#
             try
             {
                 $Schedule = $Schedules."$ScheduleName"
                 $ErrorActionPreference = [System.Management.Automation.ActionPreference]::SilentlyContinue
-                $SmaSchedule = Get-SmaSchedule -Name $ScheduleName `
-                                               -WebServiceEndpoint $CIVariables.WebserviceEndpoint `
-                                               -Port $CIVariables.WebservicePort `
-                                               -Credential $SMACred
+                $AzureAutomationSchedule = Get-AzureAutomationSchedule -Name $ScheduleName `
+                                                                       -AutomationAccountName $AutomationAccountName
                 $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
-                if(Test-IsNullOrEmpty -String $SmaSchedule.ScheduleId.Guid)
-                {
-                    Write-Verbose -Message "[$($ScheduleName)] is a New Schedule"
-                    $ScheduleDescription = "$($Schedule.Description)`n`r__RepositoryName:$($RepositoryName);CurrentCommit:$($CurrentCommit);__"
-                    $NewVersion = $True
-                }
-                else
+                if($AzureAutomationSchedule -as [bool])
                 {
                     Write-Verbose -Message "[$($ScheduleName)] is an existing Schedule"
                     $TagUpdateJSON = New-SmaChangesetTagLine -TagLine $SmaVariable.Description`
@@ -251,63 +242,70 @@ Function Publish-AzureAutomationSettingsFileChange
                     $TagUpdate = ConvertFrom-Json -InputObject $TagUpdateJSON
                     $ScheduleDescription = "$($TagUpdate.TagLine)"
                     $NewVersion = $TagUpdate.NewVersion
+                    if($NewVersion)
+                    {
+                        Write-Verbose -Message "[$($ScheduleName)] is an Updated Schedule. Deleting to re-create"
+                        Remove-AzureAutomationSchedule -Name $ScheduleName `
+                                                       -Force `
+                                                       -AutomationAccountName $AutomationAccountName
+                    }
+                }
+                else
+                {
+                    Write-Verbose -Message "[$($ScheduleName)] is a New Schedule"
+                    $ScheduleDescription = "$($Schedule.Description)`n`r__RepositoryName:$($RepositoryName);CurrentCommit:$($CurrentCommit);__"
+                    
+                    $NewVersion = $True
                 }
                 if($NewVersion)
                 {
-                    $CreateSchedule = Set-SmaSchedule -Name $ScheduleName `
-                                                      -Description $ScheduleDescription `
-                                                      -ScheduleType DailySchedule `
-                                                      -DayInterval $Schedule.DayInterval `
-                                                      -StartTime $Schedule.NextRun `
-                                                      -ExpiryTime $Schedule.ExpirationTime `
-                                                      -WebServiceEndpoint $CIVariables.WebserviceEndpoint `
-                                                      -Port $CIVariables.WebservicePort `
-                                                      -Credential $SMACred
-
-                    if(Test-IsNullOrEmpty -String $CreateSchedule)
+                    $CreateSchedule = New-AzureAutomationSchedule -Name $ScheduleName `
+                                                                  -Description $ScheduleDescription `
+                                                                  -DayInterval $Schedule.DayInterval `
+                                                                  -StartTime $Schedule.NextRun `
+                                                                  -ExpiryTime $Schedule.ExpirationTime `
+                                                                  -AutomationAccountName $AutomationAccountName
+                    if(-not ($CreateSchedule -as [bool]))
                     {
                         Throw-Exception -Type 'ScheduleFailedToCreate' `
                                         -Message 'Failed to create the schedule' `
                                         -Property @{
                             'ScheduleName'     = $ScheduleName
                             'Description'      = $ScheduleDescription
-                            'ScheduleType'     = 'DailySchedule'
                             'DayInterval'      = $Schedule.DayInterval
                             'StartTime'        = $Schedule.NextRun
                             'ExpiryTime'       = $Schedule.ExpirationTime
-                            'WebServiceEndpoint' = $CIVariables.WebserviceEndpoint
-                            'Port'             = $CIVariables.WebservicePort
+                            'AutomationAccountName' = $AutomationAccountName
                             'Credential'       = $SMACred.UserName
                         }
                     }
                     try
                     {
-                        $Parameters   = ConvertFrom-PSCustomObject -InputObject $Schedule.Parameter `
-                                                                   -MemberType NoteProperty `
-                        $RunbookStart = Start-SmaRunbook -Name $Schedule.RunbookName `
-                                                         -ScheduleName $ScheduleName `
-                                                         -WebServiceEndpoint $CIVariables.WebserviceEndpoint `
-                                                         -Port $CIVariables.WebservicePort `
-                                                         -Parameters $Parameters `
-                                                         -Credential $SMACred
-                        if(Test-IsNullOrEmpty -String $RunbookStart)
+                        $Parameters = ConvertFrom-PSCustomObject -InputObject $Schedule.Parameter `
+                                                                 -MemberType NoteProperty
+                        $Register = Register-AzureAutomationScheduledRunbook -AutomationAccountName $AutomationAccountName `
+                                                                             -RunbookName $Schedule.RunbookName `
+                                                                             -ScheduleName $ScheduleName `
+                                                                             -Parameters $Parameters
+                        if(-not($Register -as [bool]))
                         {
                             Throw-Exception -Type 'ScheduleFailedToSet' `
                                             -Message 'Failed to set the schedule on the target runbook' `
                                             -Property @{
-                                'ScheduleName' = $ScheduleName
-                                'RunbookName' = $Schedule.RunbookName
-                                'Parameters' = $(ConvertTo-Json -InputObject $Parameters)
+                                'ScheduleName' = $ScheduleName ;
+                                'RunbookName' = $Schedule.RunbookName ;
+                                'Parameters' = $(ConvertTo-Json -InputObject $Parameters) ;
+                                'AutomationAccountName' = $AutomationAccountName
                             }
                         }
                     }
                     catch
                     {
-                        Remove-SmaSchedule -Name $ScheduleName `
-                                           -WebServiceEndpoint $CIVariables.WebserviceEndpoint `
-                                           -Port $CIVariables.WebservicePort `
-                                           -Credential $SMACred `
-                                           -Force
+                        $ErrorActionPreference = [System.Management.Automation.ActionPreference]::SilentlyContinue
+                        Remove-AzureAutomationSchedule -Name $ScheduleName `
+                                                       -Force `
+                                                       -AutomationAccountName $AutomationAccountName
+                                                       $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Continue
                         Write-Exception -Exception $_ -Stream Warning
                     }
                 }
@@ -316,8 +314,6 @@ Function Publish-AzureAutomationSettingsFileChange
             {
                 Write-Exception -Exception $_ -Stream Warning
             }
-            #>
-            Write-Verbose -Message "[$($ScheduleName)] Schedules not supported yet for Azure Automation"
             Write-Verbose -Message "[$($ScheduleName)] Finished Updating"
         }
     }
