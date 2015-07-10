@@ -105,7 +105,7 @@ Function Publish-AzureAutomationRunbookChange
 }
 <#
 .Synopsis
-    Takes a json file and publishes all schedules and variables from it into SMA
+    Takes a json file and publishes all schedules and variables from it into Azure Automation
     
 .Parameter FilePath
     The path to the settings file to process
@@ -236,9 +236,9 @@ Function Publish-AzureAutomationSettingsFileChange
                 if($AzureAutomationSchedule -as [bool])
                 {
                     Write-Verbose -Message "[$($ScheduleName)] is an existing Schedule"
-                    $TagUpdateJSON = New-SmaChangesetTagLine -TagLine $SmaVariable.Description`
-                                                         -CurrentCommit $CurrentCommit `
-                                                         -RepositoryName $RepositoryName
+                    $TagUpdateJSON = New-ChangesetTagLine -TagLine $Schedule.Description`
+                                                          -CurrentCommit $CurrentCommit `
+                                                          -RepositoryName $RepositoryName
                     $TagUpdate = ConvertFrom-Json -InputObject $TagUpdateJSON
                     $ScheduleDescription = "$($TagUpdate.TagLine)"
                     $NewVersion = $TagUpdate.NewVersion
@@ -276,7 +276,6 @@ Function Publish-AzureAutomationSettingsFileChange
                             'StartTime'        = $Schedule.NextRun
                             'ExpiryTime'       = $Schedule.ExpirationTime
                             'AutomationAccountName' = $AutomationAccountName
-                            'Credential'       = $SMACred.UserName
                         }
                     }
                     try
@@ -325,51 +324,56 @@ Function Publish-AzureAutomationSettingsFileChange
 }
 <#
 .Synopsis
-    Checks a SMA environment and removes any global assets tagged
+    Checks an Azure Automation environment and removes any global assets tagged
     with the current repository that are no longer found in
     the repository
 
 .Parameter RepositoryName
     The name of the repository
 #>
-Function Remove-SmaOrphanAsset
+Function Remove-AzureAutomationOrphanAsset
 {
-    Param($RepositoryName)
+    Param(
+        [Parameter(Mandatory = $True)]
+        [String]
+        $RepositoryName,
 
-    Write-Verbose -Message "Starting [$WorkflowCommandName]"
+        [Parameter(Mandatory = $True)]
+        [PSCredential]
+        $Credential,
+
+        [Parameter(Mandatory = $True)]
+        [String]
+        $AutomationAccountName,
+
+        [Parameter(Mandatory = $True)]
+        [String]
+        $SubscriptionName,
+
+        [Parameter(Mandatory = $True)]
+        [PSCustomObject] 
+        $RepositoryInformation
+    )
+
+    Write-Verbose -Message "Starting [Remove-AzureAutomationOrphanAsset]"
     $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
     Try
     {
-        $CIVariables = Get-BatchAutomationVariable -Name @('RepositoryInformation', 
-                                                       'SMACredName', 
-                                                       'WebserviceEndpoint'
-                                                       'WebservicePort') `
-                                                   -Prefix 'SMAContinuousIntegration'
-        $SMACred = Get-AutomationPSCredential -Name $CIVariables.SMACredName
+        Connect-AzureAutomationAccount -Credential $Credential `
+                                       -SubscriptionName $SubscriptionName `
+                                       -AutomationAccountName $AutomationAccountName
 
-        $RepositoryInformation = (ConvertFrom-Json -InputObject $CIVariables.RepositoryInformation)."$RepositoryName"
-
-        $SmaVariables = Get-SmaVariable -WebServiceEndpoint $CIVariables.WebserviceEndpoint `
-                                        -Port $CIVariables.WebservicePort `
-                                        -Credential $SMACred
-        if($SmaVariables) 
+        $AzureAutomationVariables = Get-AzureAutomationVariable -AutomationAccountName $AutomationAccountName
+        if($AzureAutomationVariables) 
         {
-            $SmaVariableTable = Group-SmaAssetsByRepository -InputObject $SmaVariables 
+            $AzureAutomationVariables = Group-AssetsByRepository -InputObject $AzureAutomationVariables 
         }
 
-        $SmaSchedules = Get-SmaSchedule -WebServiceEndpoint $CIVariables.WebserviceEndpoint `
-                                        -Port $CIVariables.WebservicePort `
-                                        -Credential $SMACred
-        if($SmaSchedules) 
-        {
-            $SmaScheduleTable = Group-SmaAssetsByRepository -InputObject $SmaSchedules 
-        }
+        $RepositoryAssets = Get-GitRepositoryAssetName -Path "$($RepositoryInformation.Path)\$($RepositoryInformation.GlobalsFolder)"
 
-        $RepositoryAssets = Get-GitRepositoryAssetName -Path "$($RepositoryInformation.Path)\$($RepositoryInformation.RunbookFolder)"
-
-        if($SmaVariableTable."$RepositoryName")
+        if($AzureAutomationVariables."$RepositoryName")
         {
-            $VariableDifferences = Compare-Object -ReferenceObject $SmaVariableTable."$RepositoryName".Name `
+            $VariableDifferences = Compare-Object -ReferenceObject $AzureAutomationVariables."$RepositoryName".Name `
                                                   -DifferenceObject $RepositoryAssets.Variable
             Foreach($Difference in $VariableDifferences)
             {
@@ -378,24 +382,22 @@ Function Remove-SmaOrphanAsset
                     if($Difference.SideIndicator -eq '<=')
                     {
                         Write-Verbose -Message "[$($Difference.InputObject)] Does not exist in Source Control"
-                        Remove-SmaVariable -Name $Difference.InputObject `
-                                           -WebServiceEndpoint $CIVariables.WebserviceEndpoint `
-                                           -Port $CIVariables.WebservicePort `
-                                           -Credential $SMACred
-                        Write-Verbose -Message "[$($Difference.InputObject)] Removed from SMA"
+                        Remove-AzureAutomationVariable -Name $Difference.InputObject `
+                                                       -AutomationAccountName $CIVariables.WebserviceEndpoint `
+                                                       -Force
+                        Write-Verbose -Message "[$($Difference.InputObject)] Removed from Azure Automation"
                     }
                 }
                 Catch
                 {
-                    $Exception = New-Exception -Type 'RemoveSmaAssetFailure' `
-                                                -Message 'Failed to remove a Sma Asset' `
+                    $Exception = New-Exception -Type 'RemoveAAAssetFailure' `
+                                                -Message 'Failed to remove an AA Asset' `
                                                 -Property @{
                         'ErrorMessage' = (Convert-ExceptionToString $_) ;
                         'AssetName' = $Difference.InputObject ;
                         'AssetType' = 'Variable' ;
-                        'WebserviceEnpoint' = $CIVariables.WebserviceEndpoint ;
-                        'Port' = $CIVariables.WebservicePort ;
-                        'Credential' = $SMACred.UserName ;
+                        'AutomationAccountName' = $AutomationAccountName ;
+                        'RepositoryName' = $RepositoryName ;
                     }
                     Write-Warning -Message $Exception -WarningAction Continue
                 }
@@ -407,9 +409,15 @@ Function Remove-SmaOrphanAsset
                           -WarningAction Continue
         }
 
-        if($SmaScheduleTable."$RepositoryName")
+        $AzureAutomationSchedules = Get-AzureAutomationSchedule -AutomationAccountName $AutomationAccountName
+        if($AzureAutomationSchedules) 
         {
-            $ScheduleDifferences = Compare-Object -ReferenceObject $SmaScheduleTable."$RepositoryName".Name `
+            $AzureAutomationSchedules = Group-AssetsByRepository -InputObject $AzureAutomationSchedules 
+        }
+
+        if($AzureAutomationSchedules."$RepositoryName")
+        {
+            $ScheduleDifferences = Compare-Object -ReferenceObject $AzureAutomationSchedules."$RepositoryName".Name `
                                                   -DifferenceObject $RepositoryAssets.Schedule
             Foreach($Difference in $ScheduleDifferences)
             {
@@ -418,26 +426,24 @@ Function Remove-SmaOrphanAsset
                     if($Difference.SideIndicator -eq '<=')
                     {
                         Write-Verbose -Message "[$($Difference.InputObject)] Does not exist in Source Control"
-                        Remove-SmaSchedule -Name $Difference.InputObject `
-                                           -WebServiceEndpoint $CIVariables.WebserviceEndpoint `
-                                           -Port $CIVariables.WebservicePort `
-                                           -Credential $SMACred
-                        Write-Verbose -Message "[$($Difference.InputObject)] Removed from SMA"
+                        Remove-AzureAutomationSchedule -Name $Difference.InputObject `
+                                                       -AutomationAccountName $AutomationAccountName `
+                                                       -Force
+                        Write-Verbose -Message "[$($Difference.InputObject)] Removed from Azure Automation"
                     }
                 }
                 Catch
                 {
-                    $Exception = New-Exception -Type 'RemoveSmaAssetFailure' `
-                                                -Message 'Failed to remove a Sma Asset' `
+                    $Exception = New-Exception -Type 'RemoveAAAssetFailure' `
+                                                -Message 'Failed to remove an AA Asset' `
                                                 -Property @{
                         'ErrorMessage' = (Convert-ExceptionToString $_) ;
                         'AssetName' = $Difference.InputObject ;
                         'AssetType' = 'Schedule' ;
-                        'WebserviceEnpoint' = $CIVariables.WebserviceEndpoint ;
-                        'Port' = $CIVariables.WebservicePort ;
-                        'Credential' = $SMACred.UserName ;
+                        'AutomationAccountName' = $AutomationAccountName ;
+                        'RepositoryName' = $RepositoryName ;
                     }
-                    Write-Exception -Exception $Exception -Stream Warning
+                    Write-Warning -Message $Exception -WarningAction Continue
                 }
             }
         }
@@ -449,15 +455,15 @@ Function Remove-SmaOrphanAsset
     }
     Catch
     {
-        $Exception = New-Exception -Type 'RemoveSmaOrphanAssetWorkflowFailure' `
-                                   -Message 'Unexpected error encountered in the Remove-SmaOrphanAsset workflow' `
+        $Exception = New-Exception -Type 'RemoveAzureAutomationOrphanAssetWorkflowFailure' `
+                                   -Message 'Unexpected error encountered in the Remove-AzureAutomationOrphanAsset workflow' `
                                    -Property @{
             'ErrorMessage' = (Convert-ExceptionToString $_) ;
             'RepositoryName' = $RepositoryName ;
         }
         Write-Exception -Exception $Exception -Stream Warning
     }
-    Write-Verbose -Message "Finished [$WorkflowCommandName]"
+    Write-Verbose -Message "Finished [Remove-AzureAutomationOrphanAsset]"
 }
 <#
     .Synopsis
@@ -540,36 +546,53 @@ Function Remove-SmaOrphanModule
 }
 <#
     .Synopsis
-        Checks a SMA environment and removes any runbooks tagged
+        Checks an Azure Automation environment and removes any runbooks tagged
         with the current repository that are no longer found in
         the repository
 
     .Parameter RepositoryName
         The name of the repository
 #>
-Function Remove-SmaOrphanRunbook
+Function Remove-AzureAutomationOrphanRunbook
 {
-    Param($RepositoryName)
+    Param(
+        [Parameter(Mandatory = $True)]
+        [String]
+        $RepositoryName,
 
-    Write-Verbose -Message "Starting [$WorkflowCommandName]"
+        [Parameter(Mandatory = $True)]
+        [PSCredential]
+        $Credential,
+
+        [Parameter(Mandatory = $True)]
+        [String]
+        $AutomationAccountName,
+
+        [Parameter(Mandatory = $True)]
+        [String]
+        $SubscriptionName,
+
+        [Parameter(Mandatory = $True)]
+        [PSCustomObject] 
+        $RepositoryInformation
+    )
+
+    Write-Verbose -Message "Starting [Remove-AzureAutomationOrphanRunbook]"
     $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
     Try
     {
-        $CIVariables = Get-BatchAutomationVariable -Name @('RepositoryInformation',
-                                                           'SMACredName',
-                                                           'WebserviceEndpoint'
-                                                           'WebservicePort') `
-                                                   -Prefix 'SMAContinuousIntegration'
-        $SMACred = Get-AutomationPSCredential -Name $CIVariables.SMACredName
+        Connect-AzureAutomationAccount -Credential $Credential `
+                                       -SubscriptionName $SubscriptionName `
+                                       -AutomationAccountName $AutomationAccountName
 
-        $RepositoryInformation = (ConvertFrom-JSON -InputObject $CIVariables.RepositoryInformation)."$RepositoryName"
+        $AzureAutomationRunbooks = Get-AzureAutomationRunbook -AutomationAccountName $AutomationAccountName
+        if($AzureAutomationRunbooks) 
+        {
+            $AzureAutomationRunbooks = Group-RunbooksByRepository -InputObject $AzureAutomationRunbooks 
+        }
 
-        $SmaRunbooks = Get-SMARunbookPaged -WebserviceEndpoint $CIVariables.WebserviceEndpoint `
-                                           -Port $CIVariables.WebservicePort `
-                                           -Credential $SMACred
-        if($SmaRunbooks) { $SmaRunbookTable = Group-SmaRunbooksByRepository -InputObject $SmaRunbooks }
         $RepositoryWorkflows = Get-GitRepositoryWorkflowName -Path "$($RepositoryInformation.Path)\$($RepositoryInformation.RunbookFolder)"
-        $Differences = Compare-Object -ReferenceObject $SmaRunbookTable.$RepositoryName.RunbookName `
+        $Differences = Compare-Object -ReferenceObject $AzureAutomationRunbooks.$RepositoryName.Name `
                                       -DifferenceObject $RepositoryWorkflows
     
         Foreach($Difference in $Differences)
@@ -579,22 +602,18 @@ Function Remove-SmaOrphanRunbook
                 Try
                 {
                     Write-Verbose -Message "[$($Difference.InputObject)] Does not exist in Source Control"
-                    Remove-SmaRunbook -Name $Difference.InputObject `
-                                      -WebServiceEndpoint $CIVariables.WebserviceEndpoint `
-                                      -Port $CIVariables.WebservicePort `
-                                      -Credential $SMACred
-                    Write-Verbose -Message "[$($Difference.InputObject)] Removed from SMA"
+                    Remove-AzureAutomationRunbook -Name $Difference.InputObject `
+                                                  -AutomationAccountName $AutomationAccountName
+                    Write-Verbose -Message "[$($Difference.InputObject)] Removed from Azure Automation"
                 }
                 Catch
                 {
-                    $Exception = New-Exception -Type 'RemoveSmaRunbookFailure' `
-                                               -Message 'Failed to remove a Sma Runbook' `
-                                               -Property @{
+                    $Exception = New-Exception -Type 'RemoveAzureAutomationRunbookFailure' `
+                                                -Message 'Failed to remove a Azure Automation Runbook' `
+                                                -Property @{
                         'ErrorMessage' = (Convert-ExceptionToString $_) ;
-                        'RunbookName' = $Difference.InputObject ;
-                        'WebserviceEnpoint' = $CIVariables.WebserviceEndpoint ;
-                        'Port' = $CIVariables.WebservicePort ;
-                        'Credential' = $SMACred.UserName ;
+                        'Name' = $Difference.InputObject ;
+                        'AutomationAccount' = $AutomationAccountName ;
                     }
                     Write-Warning -Message $Exception -WarningAction Continue
                 }
@@ -603,15 +622,15 @@ Function Remove-SmaOrphanRunbook
     }
     Catch
     {
-        $Exception = New-Exception -Type 'RemoveSmaOrphanRunbookWorkflowFailure' `
-                                   -Message 'Unexpected error encountered in the Remove-SmaOrphanRunbook workflow' `
+        $Exception = New-Exception -Type 'RemoveAzureAutomationOrphanRunbookWorkflowFailure' `
+                                   -Message 'Unexpected error encountered in the Remove-AzureAutomationOrphanRunbook workflow' `
                                    -Property @{
             'ErrorMessage' = (Convert-ExceptionToString $_) ;
             'RepositoryName' = $RepositoryName ;
         }
         Write-Exception -Exception $Exception -Stream Warning
     }
-    Write-Verbose -Message "Finished [$WorkflowCommandName]"
+    Write-Verbose -Message "Finished [Remove-AzureAutomationOrphanRunbook]"
 }
 
 <#
