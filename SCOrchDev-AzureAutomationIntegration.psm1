@@ -818,6 +818,10 @@ Function Sync-GitRepositoryToAzureAutomation
         
         [Parameter(Mandatory = $True)]
         [string]
+        $RepositoryInformationJSON,
+
+        [Parameter(Mandatory = $True)]
+        [string]
         $AutomationAccountName,
         
         [Parameter(Mandatory = $True)]
@@ -921,7 +925,7 @@ Function Sync-GitRepositoryToAzureAutomation
                     Write-Exception -Exception $_ -Stream Warning
                 }
             }
-            $UpdatedRepositoryInformation = (Set-RepositoryInformationCommitVersion -RepositoryInformation $RepositoryInformation `
+            $UpdatedRepositoryInformation = (Set-RepositoryInformationCommitVersion -RepositoryInformation $RepositoryInformationJSON `
                                                                                     -RepositoryName $RepositoryName `
                                                                                     -Commit $RepositoryChange.CurrentCommit) -as [string]
             $VariableUpdate = Set-AutomationVariable -Name 'ContinuousIntegration-RepositoryInformation' `
