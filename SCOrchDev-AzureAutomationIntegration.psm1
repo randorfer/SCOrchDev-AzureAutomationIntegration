@@ -355,7 +355,7 @@ Function Remove-AzureAutomationOrphanAsset
         $RepositoryInformation
     )
 
-    Write-Verbose -Message "Starting [Remove-AzureAutomationOrphanAsset]"
+    Write-Verbose -Message 'Starting [Remove-AzureAutomationOrphanAsset]'
     $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
     Try
     {
@@ -383,7 +383,7 @@ Function Remove-AzureAutomationOrphanAsset
                     {
                         Write-Verbose -Message "[$($Difference.InputObject)] Does not exist in Source Control"
                         Remove-AzureAutomationVariable -Name $Difference.InputObject `
-                                                       -AutomationAccountName $CIVariables.WebserviceEndpoint `
+                                                       -AutomationAccountName $AutomationAccountName `
                                                        -Force
                         Write-Verbose -Message "[$($Difference.InputObject)] Removed from Azure Automation"
                     }
@@ -463,87 +463,9 @@ Function Remove-AzureAutomationOrphanAsset
         }
         Write-Exception -Exception $Exception -Stream Warning
     }
-    Write-Verbose -Message "Finished [Remove-AzureAutomationOrphanAsset]"
+    Write-Verbose -Message 'Finished [Remove-AzureAutomationOrphanAsset]'
 }
-<#
-    .Synopsis
-        Checks a SMA environment and removes any modules that are not found
-        in the local psmodulepath
-#>
-Function Remove-SmaOrphanModule
-{
-    Write-Verbose -Message "Starting [$WorkflowCommandName]"
-    $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
-    Try
-    {
-        $CIVariables = Get-BatchAutomationVariable -Name @('SMACredName',
-                                                       'WebserviceEndpoint'
-                                                       'WebservicePort') `
-                                               -Prefix 'SMAContinuousIntegration'
-        $SMACred = Get-AutomationPSCredential -Name $CIVariables.SMACredName
 
-        $SmaModule = Get-SmaModule -WebServiceEndpoint $CIVariables.WebserviceEndpoint `
-                                   -Port $CIVariables.WebservicePort `
-                                   -Credential $SMACred
-
-        $LocalModule = Get-Module -ListAvailable -Refresh -Verbose:$false
-
-        if(-not ($SmaModule -and $LocalModule))
-        {
-            if(-not $SmaModule)   { Write-Warning -Message 'No modules found in SMA. Not cleaning orphan modules' }
-            if(-not $LocalModule) { Write-Warning -Message 'No modules found in local PSModule Path. Not cleaning orphan modules' }
-        }
-        else
-        {
-            $ModuleDifference = Compare-Object -ReferenceObject  $SmaModule.ModuleName `
-                                               -DifferenceObject $LocalModule.Name
-            Foreach($Difference in $ModuleDifference)
-            {
-                if($Difference.SideIndicator -eq '<=')
-                {
-                    Try
-                    {
-                        Write-Verbose -Message "[$($Difference.InputObject)] Does not exist in Source Control"
-                        <#
-                        TODO: Investigate / Test before uncommenting. Potential to brick an environment
-
-                        Remove-SmaModule -Name $Difference.InputObject `
-                                         -WebServiceEndpoint $CIVariables.WebserviceEndpoint `
-                                         -Port $CIVariables.WebservicePort `
-                                         -Credential $SMACred
-                        #>
-                        Write-Verbose -Message "[$($Difference.InputObject)] Removed from SMA"
-                    }
-                    Catch
-                    {
-                        $Exception = New-Exception -Type 'RemoveSmaModuleFailure' `
-                                                   -Message 'Failed to remove a Sma Module' `
-                                                   -Property @{
-                            'ErrorMessage' = (Convert-ExceptionToString $_) ;
-                            'RunbookName' = $Difference.InputObject ;
-                            'WebserviceEnpoint' = $CIVariables.WebserviceEndpoint ;
-                            'Port' = $CIVariables.WebservicePort ;
-                            'Credential' = $SMACred.UserName ;
-                        }
-                        Write-Warning -Message $Exception -WarningAction Continue
-                    }
-                }
-            }
-        }
-    }
-    Catch
-    {
-        $Exception = New-Exception -Type 'RemoveSmaOrphanModuleWorkflowFailure' `
-                                   -Message 'Unexpected error encountered in the Remove-SmaOrphanModule workflow' `
-                                   -Property @{
-            'ErrorMessage' = (Convert-ExceptionToString $_) ;
-            'RepositoryName' = $RepositoryName ;
-        }
-        Write-Exception -Exception $Exception -Stream Warning
-    }
-    
-    Write-Verbose -Message "Finished [$WorkflowCommandName]"
-}
 <#
     .Synopsis
         Checks an Azure Automation environment and removes any runbooks tagged
@@ -577,7 +499,7 @@ Function Remove-AzureAutomationOrphanRunbook
         $RepositoryInformation
     )
 
-    Write-Verbose -Message "Starting [Remove-AzureAutomationOrphanRunbook]"
+    Write-Verbose -Message 'Starting [Remove-AzureAutomationOrphanRunbook]'
     $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
     Try
     {
@@ -630,7 +552,7 @@ Function Remove-AzureAutomationOrphanRunbook
         }
         Write-Exception -Exception $Exception -Stream Warning
     }
-    Write-Verbose -Message "Finished [Remove-AzureAutomationOrphanRunbook]"
+    Write-Verbose -Message 'Finished [Remove-AzureAutomationOrphanRunbook]'
 }
 
 <#
@@ -688,7 +610,7 @@ Function Get-AzureAutomationHybridRunbookWorker
         $Name
     )
     
-    Return @($Env:ComputerName) -as [array]
+    Return @($env:COMPUTERNAME) -as [array]
 }
 
 <#
@@ -772,6 +694,9 @@ Function Import-AzurePSModule
 .Parameter Credential
     A credential object to use for the request. If not passed this method will use
     the default credential
+
+.Notes
+    Not yet implemented. Module deployment is currently done only to hybrid workers local paths
 #>
 Function Publish-AzureAutomationPowerShellModule
 {
@@ -866,5 +791,142 @@ Function Publish-AzureAutomationPowerShellModule
     }
 
     Write-Verbose -Message 'Finished [Publish-AzureAutomationPowershellModule]'
+}
+
+<#
+.Synopsis
+    Top level function for syncing a target git Repository to Azure Automation
+#>
+Function Sync-GitRepositoryToAzureAutomation
+{
+    Param(
+        [Parameter(Mandatory = $True)]
+        [pscredential]
+        $SubscriptionAccessCredential,
+
+        [Parameter(Mandatory = $True)]
+        [pscredential]
+        $RunbookWorkerAccessCredenial,
+
+        [Parameter(Mandatory = $True)]
+        [string]
+        $RepositoryInformation,
+        
+        [Parameter(Mandatory = $True)]
+        [string]
+        $AutomationAccountName,
+        
+        [Parameter(Mandatory = $True)]
+        [string]
+        $SubscriptionName
+    )
+    
+    Write-Verbose -Message 'Starting [Sync-GitRepositoryToAzureAutomation]'
+    $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
+    
+    Try
+    {
+        $RunbookWorker = Get-AzureAutomationHybridRunbookWorker -Name $RepositoryInformation.HybridWorkerGroup
+        
+        # Update the repository on all SMA Workers
+        Invoke-Command -ComputerName $RunbookWorker -Credential $RunbookWorkerAccessCredenial -ScriptBlock {
+            $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
+                    
+            $RepositoryInformation = $Using:RepositoryInformation
+            Update-GitRepository -RepositoryInformation $RepositoryInformation
+        }
+
+        $RepositoryChangeJSON = Find-GitRepositoryChange -RepositoryInformation $RepositoryInformation
+        $RepositoryChange = ConvertFrom-Json -InputObject $RepositoryChangeJSON
+        if($RepositoryChange.CurrentCommit -as [string] -ne $RepositoryInformation.CurrentCommit -as [string])
+        {
+            Write-Verbose -Message "Processing [$($RepositoryInformation.CurrentCommit)..$($RepositoryChange.CurrentCommit)]"
+            Write-Verbose -Message "RepositoryChange [$RepositoryChangeJSON]"
+            $ReturnInformationJSON = Group-RepositoryFile -Files $RepositoryChange.Files `
+                                                          -RepositoryInformation $RepositoryInformation
+            $ReturnInformation = ConvertFrom-Json -InputObject $ReturnInformationJSON
+            Write-Verbose -Message "ReturnInformation [$ReturnInformationJSON]"
+            
+            Foreach($SettingsFilePath in $ReturnInformation.SettingsFiles)
+            {
+                Publish-AzureAutomationSettingsFileChange -FilePath $SettingsFilePath `
+                                                          -CurrentCommit $RepositoryChange.CurrentCommit `
+                                                          -RepositoryName $RepositoryName `
+                                                          -Credential $SubscriptionAccessCredential `
+                                                          -AutomationAccountName $AutomationAccountName `
+                                                          -SubscriptionName $SubscriptionName
+            }
+            Foreach($RunbookFilePath in $ReturnInformation.ScriptFiles)
+            {
+                Publish-AzureAutomationRunbookChange -FilePath $RunbookFilePath `
+                                                     -CurrentCommit $RepositoryChange.CurrentCommit `
+                                                     -RepositoryName $RepositoryName `
+                                                     -Credential $SubscriptionAccessCredential `
+                                                     -AutomationAccountName $AutomationAccountName `
+                                                     -SubscriptionName $SubscriptionName
+            }
+            
+            if($ReturnInformation.CleanRunbooks)
+            {
+                Remove-AzureAutomationOrphanRunbook -RepositoryName $RepositoryName `
+                                                    -SubscriptionName $SubscriptionName `
+                                                    -AutomationAccountName $AutomationAccountName `
+                                                    -Credential $SubscriptionAccessCredential `
+                                                    -RepositoryInformation $RepositoryInformation
+            }
+            if($ReturnInformation.CleanAssets)
+            {
+                Remove-AzureAutomationOrphanAsset -RepositoryName $RepositoryName `
+                                                  -SubscriptionName $SubscriptionName `
+                                                  -AutomationAccountName $AutomationAccountName `
+                                                  -Credential $SubscriptionAccessCredential `
+                                                  -RepositoryInformation $RepositoryInformation
+            }
+            if($ReturnInformation.ModuleFiles)
+            {
+                Try
+                {
+                    Write-Verbose -Message 'Validating Module Path on Runbook Wokers'
+                    $RepositoryModulePath = "$($RepositoryInformation.Path)\$($RepositoryInformation.PowerShellModuleFolder)"
+                    Invoke-Command -ComputerName $RunbookWorker -Credential $RunbookWorkerAccessCredenial -ScriptBlock {
+                        $RepositoryModulePath = $Using:RepositoryModulePath
+                        Try
+                        {
+                            Add-PSEnvironmentPathLocation -Path $RepositoryModulePath
+                        }
+                        Catch
+                        {
+                            $Exception = New-Exception -Type 'PowerShellModulePathValidationError' `
+                                               -Message 'Failed to set PSModulePath' `
+                                               -Property @{
+                                'ErrorMessage' = (Convert-ExceptionToString $_) ;
+                                'RepositoryModulePath' = $RepositoryModulePath ;
+                                'RunbookWorker' = $env:COMPUTERNAME ;
+                            }
+                            Write-Warning -Message $Exception -WarningAction Continue
+                        }
+                    }
+                    Write-Verbose -Message 'Finished Validating Module Path on Runbook Wokers'
+                }
+                Catch
+                {
+                    Write-Exception -Exception $_ -Stream Warning
+                }
+            }
+            $UpdatedRepositoryInformation = (Set-RepositoryInformationCommitVersion -RepositoryInformation $RepositoryInformation `
+                                                                                    -RepositoryName $RepositoryName `
+                                                                                    -Commit $RepositoryChange.CurrentCommit) -as [string]
+            $VariableUpdate = Set-AutomationVariable -Name 'ContinuousIntegration-RepositoryInformation' `
+                                                     -Value $UpdatedRepositoryInformation
+
+            Write-Verbose -Message "Finished Processing [$($RepositoryInformation.CurrentCommit)..$($RepositoryChange.CurrentCommit)]"
+        }
+    }
+    Catch
+    {
+        Write-Exception -Stream Warning -Exception $_
+    }
+
+    Write-Verbose -Message 'Completed [Sync-GitRepositoryToAzureAutomation]'
 }
 Export-ModuleMember -Function * -Verbose:$false
