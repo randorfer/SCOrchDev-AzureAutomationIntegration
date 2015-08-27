@@ -813,7 +813,7 @@ Function Sync-GitRepositoryToAzureAutomation
         $RunbookWorkerAccessCredenial,
 
         [Parameter(Mandatory = $True)]
-        [string]
+        [psobject]
         $RepositoryInformation,
         
         [Parameter(Mandatory = $True)]
