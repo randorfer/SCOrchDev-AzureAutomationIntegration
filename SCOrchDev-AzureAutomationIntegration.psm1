@@ -822,7 +822,11 @@ Function Sync-GitRepositoryToAzureAutomation
         
         [Parameter(Mandatory = $True)]
         [string]
-        $SubscriptionName
+        $SubscriptionName,
+
+        [Parameter(Mandatory = $True)]
+        [string]
+        $RepositoryName
     )
     
     Write-Verbose -Message 'Starting [Sync-GitRepositoryToAzureAutomation]'
