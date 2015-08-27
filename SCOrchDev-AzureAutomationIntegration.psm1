@@ -664,7 +664,8 @@ Function Import-AzurePSModule
     Param(
     )
     $ModuleLoaded = (Get-Module 'Azure') -as [bool]
-
+    $VBP = $VerbosePreference
+    $VerbosePreference = [System.Management.Automation.ActionPreference]::SilentlyContinue
     if(-not $ModuleLoaded)
     {
         $64BitPath = 'C:\Program Files (x86)\Microsoft SDKs\Azure\PowerShell\ServiceManagement\Azure'
@@ -672,13 +673,16 @@ Function Import-AzurePSModule
         if(Test-Path -Path $64BitPath)
         {
             Import-Module $64BitPath -Force
+            $VerbosePreference = [System.Management.Automation.ActionPreference]$VBP
         }
         elseif(Test-Path -Path $32BitPath)
         {
             Import-Module $32BitPath -Force
+            $VerbosePreference = [System.Management.Automation.ActionPreference]$VBP
         }
         else
         {
+            $VerbosePreference = [System.Management.Automation.ActionPreference]$VBP
             Throw-Exception -Type 'ModuleNotFound' `
                             -Message 'Could not load the azure module. Please install from https://github.com/Azure/azure-powershell/releases'
         }
