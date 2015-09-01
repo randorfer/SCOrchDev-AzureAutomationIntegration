@@ -639,6 +639,10 @@ Function Get-BatchAutomationVariable
         {
             $_VarName =  "$Prefix-$VarName"
         }
+        Else
+        {
+            $_VarName = $VarName
+        }
         $Result = & $VarCommand -Name "$_VarName" @VarParams
         $ResultValue = Select-FirstValid @($Result.Value,$Result)
         $Variables[$VarName] = $ResultValue
