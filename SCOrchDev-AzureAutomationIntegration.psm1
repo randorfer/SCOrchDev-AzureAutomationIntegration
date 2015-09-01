@@ -718,6 +718,7 @@ Function Import-AzurePSModule
     )
     $ModuleLoaded = (Get-Module 'Azure') -as [bool]
     $VBP = $VerbosePreference
+    $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
     $VerbosePreference = [System.Management.Automation.ActionPreference]::SilentlyContinue
     if(-not $ModuleLoaded)
     {
