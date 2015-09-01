@@ -562,45 +562,16 @@ Function Remove-AzureAutomationOrphanRunbook
 function Test-LocalDevelopment
 {
     $LocalDevModule = Get-Module -ListAvailable -Name 'LocalDev' -Verbose:$False -ErrorAction 'SilentlyContinue' -WarningAction 'SilentlyContinue'
-    if($LocalDevModule -ne $Null -and ($env:LocalAuthoring -ne $False))
+    if($LocalDevModule -ne $Null)
     {
         return $True
     }
     return $False
 }
 
-<#
-.SYNOPSIS
-    Gets one or more automation variable values from the given web service endpoint.
-
-.DESCRIPTION
-    Get-BatchAutomationVariable gets the value of each variable given in $Name.
-    If $Prefix is set, "$Prefix-$Name" is looked up in (helps keep the
-    list of variables in $Name concise).
-
-.PARAMETER Name
-    A list of variable values to retrieve.
-    
-.PARAMETER Prefix
-    A prefix to be applied to each variable name when performing the lookup. 
-    A '-' is added to the end of $Prefix automatically.
-#>
 Function Get-BatchAutomationVariable
 {
-    [OutputType([hashtable])]
     Param(
-        [Parameter(Mandatory = $True)]
-        [String]
-        $AutomationAccountName,
-
-        [Parameter(Mandatory = $True)]
-        [String]
-        $SubscriptionName,
-
-        [Parameter(Mandatory = $True)]
-        [pscredential]
-        $Credential,
-
         [Parameter(Mandatory = $True)]
         [String[]]
         $Name,
@@ -610,43 +581,22 @@ Function Get-BatchAutomationVariable
         [String]
         $Prefix = $Null
     )
-    $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
-    $VBP = $VerbosePreference
-    $DBP = $DebugPreference
     $Variables = @{}
-    $VarCommand = (Get-Command -Name 'Get-AzureAutomationVariable')
-    $VarParams = @{'AutomationAccountName' = $AutomationAccountName}
-    # We can't call Get-AutomationVariable in SMA from a function, so we have to determine if we
-    # are developing locally. If we are, we can call Get-AutomationVariable. If not, we'll call
-    # Get-SMAVariable and pass it an endpoint representing localhost.
-    If(Test-LocalDevelopment)
-    {
-        $VarCommand = (Get-Command -Name 'Get-AutomationVariable')
-        $VarParams = @{}
-    }
-    else
-    {
-        $VerbosePreference = [System.Management.Automation.ActionPreference]::SilentlyContinue
-        $DebugPreference = [System.Management.Automation.ActionPreference]::SilentlyContinue
-        Connect-AzureAutomationAccount -Credential $Credential `
-                                       -SubscriptionName $SubscriptionName `
-                                       -AutomationAccountName $AutomationAccountName
-    }
+    
     ForEach($VarName in $Name)
     {
-        $VerbosePreference = [System.Management.Automation.ActionPreference]::SilentlyContinue
         If(-not [String]::IsNullOrEmpty($Prefix))
         {
-            $_VarName =  "$Prefix-$VarName"
+            $Variables[$VarName] = (Get-AutomationVariable -Name "$Prefix-$VarName").Value
         }
-        $Result = & $VarCommand -Name "$_VarName" @VarParams
-        $ResultValue = Select-FirstValid @($Result.Value,$Result)
-        $Variables[$VarName] = $ResultValue
-        $VerbosePreference = [System.Management.Automation.ActionPreference]$VBP
-        Write-Verbose -Message "Variable [$Prefix / $VarName] = [$($Variables[$VarName])]"
+        Else
+        {
+            $Variables[$VarName] = (Get-AutomationVariable -Name $VarName).Value
+        }
+        
+        Write-Verbose -Message "Variable [$VarName / $VarName] = [$($Variables[$VarName])]"
     }
-    $DebugPreference = [System.Management.Automation.ActionPreference]$DBP
-    Return ($Variables -as [hashtable])
+    Return (New-Object -TypeName 'PSObject' -Property $Variables)
 }
 <#
 .Synopsis
@@ -684,18 +634,15 @@ Function Connect-AzureAutomationAccount
     )
 
     Import-AzurePSModule
-    $VBP = $VerbosePreference
-    $VerbosePreference = [System.Management.Automation.ActionPreference]::SilentlyContinue
+
     $AzureAccount = Get-AzureAccount
     if($AzureAccount.Id -ne $Credential.UserName)
     {
         $AzureAccount | ForEach-Object { Remove-AzureAccount -Name $_.Id -Force }
         Add-AzureAccount -Credential $Credential
-        
     }
-    Select-AzureSubscription -SubscriptionName $SubscriptionName
+    
     $AzureAccountAccessible = (Get-AzureAutomationAccount -Name $AutomationAccountName) -as [bool]
-    $VerbosePreference = [System.Management.Automation.ActionPreference]$VBP
     if(-not $AzureAccountAccessible)
     {
         Throw-Exception -Type 'AzureAutomationAccountNotAccessible' `
@@ -716,6 +663,7 @@ Function Import-AzurePSModule
 {
     Param(
     )
+    $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
     $ModuleLoaded = (Get-Module 'Azure') -as [bool]
     $VBP = $VerbosePreference
     $VerbosePreference = [System.Management.Automation.ActionPreference]::SilentlyContinue
