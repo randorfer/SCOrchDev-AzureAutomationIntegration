@@ -721,11 +721,13 @@ Function Import-AzurePSModule
     Param(
     )
     $ModuleLoaded = (Get-Module 'Azure') -as [bool]
-    $VBP = $VerbosePreference
-    $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
-    $VerbosePreference = [System.Management.Automation.ActionPreference]::SilentlyContinue
+    
     if(-not $ModuleLoaded)
     {
+        $VBP = $VerbosePreference
+        $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
+        $VerbosePreference = [System.Management.Automation.ActionPreference]::SilentlyContinue
+
         $64BitPath = 'C:\Program Files (x86)\Microsoft SDKs\Azure\PowerShell\ServiceManagement\Azure'
         $32BitPath = 'C:\Program Files\Microsoft SDKs\Azure\PowerShell\ServiceManagement\Azure'
         if(Test-Path -Path $64BitPath)
