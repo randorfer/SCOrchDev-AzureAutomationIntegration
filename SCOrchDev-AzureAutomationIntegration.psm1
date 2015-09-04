@@ -988,8 +988,13 @@ Function Sync-GitRepositoryToAzureAutomation
             $UpdatedRepositoryInformation = (Set-RepositoryInformationCommitVersion -RepositoryInformation $RepositoryInformationJSON `
                                                                                     -RepositoryName $RepositoryName `
                                                                                     -Commit $RepositoryChange.CurrentCommit) -as [string]
-            $VariableUpdate = Set-AutomationVariable -Name 'ContinuousIntegration-RepositoryInformation' `
-                                                     -Value $UpdatedRepositoryInformation
+            
+            Connect-AzureAutomationAccount -Credential $SubscriptionAccessCredential `
+                                           -SubscriptionName $SubscriptionName `
+                                           -AutomationAccountName $AutomationAccountName
+            $VariableUpdate = Set-AzureAutomationVariable -Name 'ContinuousIntegration-RepositoryInformation' `
+                                                          -Value $UpdatedRepositoryInformation `
+                                                          -AutomationAccountName $AutomationAccountName
 
             Write-Verbose -Message "Finished Processing [$($RepositoryInformation.CurrentCommit)..$($RepositoryChange.CurrentCommit)]"
         }
