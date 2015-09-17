@@ -77,7 +77,7 @@ if ($PSVersionTable.PSVersion.Major -ge 3)
 }
 
 Describe 'Style rules' {
-    $_ModuleBase = (Get-Module SCOrchDev-F5).ModuleBase
+    $_ModuleBase = (Get-Module SCOrchDev-GitIntegration).ModuleBase
 
     $files = @(
         Get-ChildItem $_ModuleBase -Include *.ps1,*.psm1

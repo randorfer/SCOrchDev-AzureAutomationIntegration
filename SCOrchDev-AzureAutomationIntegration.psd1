@@ -48,7 +48,7 @@ PowerShellVersion = '4.0'
 # ProcessorArchitecture = ''
 
 # Modules that must be imported into the global environment prior to importing this module
-RequiredModules = @('SCOrchDev-Utility', 'SCOrchDev-GitIntegration', 'SCOrchDev-Exception', 'SCOrchDev-File')
+RequiredModules = @('SCOrchDev-Utility', 'SCOrchDev-GitIntegration', 'SCOrchDev-Exception', 'SCOrchDev-File', 'Azure')
 
 # Assemblies that must be loaded prior to importing this module
 # RequiredAssemblies = @()

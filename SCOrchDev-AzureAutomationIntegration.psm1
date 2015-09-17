@@ -1,4 +1,5 @@
-﻿<#
+﻿#requires -Version 3 -Modules Azure, SCOrchDev-Exception, SCOrchDev-GitIntegration, SCOrchDev-Utility
+<#
     .Synopsis
         Takes a ps1 file and publishes it to the current Azure Automation environment.
     
