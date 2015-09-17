@@ -27,7 +27,7 @@ Describe -Tags 'VersionChecks' 'SCOrchDev-F5 AzureAutomationIntegration' {
         $script:tagVersion = $null
         It 'is tagged with a valid version' {
             $cwd = get-location
-            Set-Location ($here -as [System.IO.FileInfo]).Directory
+            Set-Location ($PATH -as [System.IO.FileInfo]).Directory
             $thisCommit = git.exe log --decorate --oneline HEAD~1..HEAD
             Set-Location $cwd
             if ($thisCommit -match 'tag:\s*(\d+(?:\.\d+)*)')
