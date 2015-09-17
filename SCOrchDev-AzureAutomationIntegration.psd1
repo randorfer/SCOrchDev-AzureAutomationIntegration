@@ -12,7 +12,7 @@
 RootModule = '.\SCOrchDev-AzureAutomationIntegration.psm1'
 
 # Version number of this module.
-ModuleVersion = '1.0.4'
+ModuleVersion = '2.0.0'
 
 # ID used to uniquely identify this module
 GUID = '1dafd04a-a2c2-4245-a2ba-69bfcd6bfe0a'
@@ -27,7 +27,7 @@ CompanyName = 'SCOrchDev'
 Copyright = '(c) SCOrchDev. All rights reserved.'
 
 # Description of the functionality provided by this module
-# Description = ''
+Description = 'Integration wrapper for Azure Automation'
 
 # Minimum version of the Windows PowerShell engine required by this module
 PowerShellVersion = '4.0'
@@ -81,7 +81,7 @@ AliasesToExport = '*'
 ModuleList = @('SCOrchDev-AzureAutomationIntegration')
 
 # List of all files packaged with this module
-FileList = @('SCOrchDev-AzureAutomationIntegration.psd1', 'SCOrchDev-AzureAutomationIntegration.psm1')
+FileList = @('SCOrchDev-AzureAutomationIntegration.psd1', 'SCOrchDev-AzureAutomationIntegration.psm1', 'LICENSE', 'README.md', 'SCOrchDev-AzureAutomationIntegration.tests.ps1')
 
 # Private data to pass to the module specified in RootModule/ModuleToProcess
 # PrivateData = ''

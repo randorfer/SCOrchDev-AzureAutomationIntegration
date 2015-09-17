@@ -590,18 +590,6 @@ Function Get-BatchAutomationVariable
     [OutputType([hashtable])]
     Param(
         [Parameter(Mandatory = $True)]
-        [String]
-        $AutomationAccountName,
-
-        [Parameter(Mandatory = $True)]
-        [String]
-        $SubscriptionName,
-
-        [Parameter(Mandatory = $True)]
-        [pscredential]
-        $Credential,
-
-        [Parameter(Mandatory = $True)]
         [String[]]
         $Name,
 
@@ -611,30 +599,10 @@ Function Get-BatchAutomationVariable
         $Prefix = $Null
     )
     $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
-    $VBP = $VerbosePreference
-    $DBP = $DebugPreference
     $Variables = @{}
-    $VarCommand = (Get-Command -Name 'Get-AzureAutomationVariable')
-    $VarParams = @{'AutomationAccountName' = $AutomationAccountName}
-    # We can't call Get-AutomationVariable in SMA from a function, so we have to determine if we
-    # are developing locally. If we are, we can call Get-AutomationVariable. If not, we'll call
-    # Get-SMAVariable and pass it an endpoint representing localhost.
-    If(Test-LocalDevelopment)
-    {
-        $VarCommand = (Get-Command -Name 'Get-AutomationVariable')
-        $VarParams = @{}
-    }
-    else
-    {
-        $VerbosePreference = [System.Management.Automation.ActionPreference]::SilentlyContinue
-        $DebugPreference = [System.Management.Automation.ActionPreference]::SilentlyContinue
-        Connect-AzureAutomationAccount -Credential $Credential `
-                                       -SubscriptionName $SubscriptionName `
-                                       -AutomationAccountName $AutomationAccountName
-    }
+    
     ForEach($VarName in $Name)
     {
-        $VerbosePreference = [System.Management.Automation.ActionPreference]::SilentlyContinue
         If(-not [String]::IsNullOrEmpty($Prefix))
         {
             $_VarName =  "$Prefix-$VarName"
@@ -643,13 +611,10 @@ Function Get-BatchAutomationVariable
         {
             $_VarName = $VarName
         }
-        $Result = & $VarCommand -Name "$_VarName" @VarParams
-        $ResultValue = Select-FirstValid @($Result.Value,$Result)
-        $Variables[$VarName] = $ResultValue
-        $VerbosePreference = [System.Management.Automation.ActionPreference]$VBP
+        $Result = Get-AutomationVariable -Name "$_VarName"
+        $Variables[$VarName] = $Result
         Write-Verbose -Message "Variable [$Prefix / $VarName] = [$($Variables[$VarName])]"
     }
-    $DebugPreference = [System.Management.Automation.ActionPreference]$DBP
     Return ($Variables -as [hashtable])
 }
 <#
