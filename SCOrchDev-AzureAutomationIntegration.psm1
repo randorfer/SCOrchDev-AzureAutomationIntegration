@@ -1,4 +1,4 @@
-﻿#requires -Version 3 -Modules Azure, SCOrchDev-Exception, SCOrchDev-GitIntegration, SCOrchDev-Utility
+﻿#requires -Version 3 -Modules SCOrchDev-Exception, SCOrchDev-GitIntegration, SCOrchDev-Utility
 <#
     .Synopsis
         Takes a ps1 file and publishes it to the current Azure Automation environment.
@@ -38,7 +38,11 @@ Function Publish-AzureAutomationRunbookChange
 
         [Parameter(Mandatory = $True)]
         [String]
-        $SubscriptionName
+        $SubscriptionName,
+
+        [Parameter(Mandatory = $True)]
+        [String]
+        $ResourceGroupName
     )
     
     Write-Verbose -Message "[$FilePath] Starting [Publish-AzureAutomationRunbookChange]"
@@ -48,13 +52,15 @@ Function Publish-AzureAutomationRunbookChange
     {
         Connect-AzureAutomationAccount -Credential $Credential `
                                        -SubscriptionName $SubscriptionName `
-                                       -AutomationAccountName $AutomationAccountName
+                                       -AutomationAccountName $AutomationAccountName `
+                                       -ResourceGroupName $ResourceGroupName
 
         $WorkflowName = Get-WorkflowNameFromFile -FilePath $FilePath
         
         $ErrorActionPreference = [System.Management.Automation.ActionPreference]::SilentlyContinue
         $Runbook = Get-AzureAutomationRunbook -Name $WorkflowName `
-                                              -AutomationAccountName $AutomationAccountName
+                                              -AutomationAccountName $AutomationAccountName `
+                                              -ResourceGroupName $ResourceGroupName
         $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
 
         if($Runbook -as [bool])
@@ -74,7 +80,8 @@ Function Publish-AzureAutomationRunbookChange
                                                                 -AutomationAccountName $AutomationAccountName
                 $TagUpdate = Set-AzureAutomationRunbook -Name $WorkflowName `
                                                         -Tags $TagLine.Split(';') `
-                                                        -AutomationAccountName $AutomationAccountName
+                                                        -AutomationAccountName $AutomationAccountName `
+                                                        -ResourceGroupName $ResourceGroupName
             }
             else
             {
@@ -650,31 +657,37 @@ Function Connect-AzureAutomationAccount
 
         [Parameter(Mandatory = $True)]
         [string]
-        $AutomationAccountName
-    )
+        $AutomationAccountName,
 
-    $VBP = $VerbosePreference
-    $VerbosePreference = [System.Management.Automation.ActionPreference]::SilentlyContinue
-    $AzureAccount = Get-AzureAccount
-    if($AzureAccount.Id -ne $Credential.UserName)
-    {
-        $AzureAccount | ForEach-Object { Remove-AzureAccount -Name $_.Id -Force }
-        Add-AzureAccount -Credential $Credential
+        [Parameter(Mandatory = $True)]
+        [string]
+        $ResourceGroupName
+    )
+    $Null = $(
+        $VBP = $VerbosePreference
+        $VerbosePreference = [System.Management.Automation.ActionPreference]::SilentlyContinue
+        Switch-AzureMode AzureResourceManager
+        $AzureAccount = Get-AzureAccount
+        if($AzureAccount.Id -ne $Credential.UserName)
+        {
+            $AzureAccount | ForEach-Object { Remove-AzureAccount -Name $_.Id -Force }
+            Add-AzureAccount -Credential $Credential
         
-    }
-    Select-AzureSubscription -SubscriptionName $SubscriptionName
-    $AzureAccountAccessible = (Get-AzureAutomationAccount -Name $AutomationAccountName) -as [bool]
-    $VerbosePreference = [System.Management.Automation.ActionPreference]$VBP
-    if(-not $AzureAccountAccessible)
-    {
-        Throw-Exception -Type 'AzureAutomationAccountNotAccessible' `
-                        -Message 'Could not access the target Azure Automation Account' `
-                        -Property @{
-                            'Credential' = $Credential ;
-                            'SubscriptionName' = $SubscriptionName ;
-                            'AutomationAccountName' = $AutomationAccountName ;
-                        }
-    }
+        }
+        Select-AzureSubscription -SubscriptionName $SubscriptionName
+        $AzureAccountAccessible = (Get-AzureAutomationAccount -Name $AutomationAccountName -ResourceGroupName $ResourceGroupName) -as [bool]
+        $VerbosePreference = [System.Management.Automation.ActionPreference]$VBP
+        if(-not $AzureAccountAccessible)
+        {
+            Throw-Exception -Type 'AzureAutomationAccountNotAccessible' `
+                            -Message 'Could not access the target Azure Automation Account' `
+                            -Property @{
+                                'Credential' = $Credential ;
+                                'SubscriptionName' = $SubscriptionName ;
+                                'AutomationAccountName' = $AutomationAccountName ;
+                            }
+        }
+    )
 }
 
 <#

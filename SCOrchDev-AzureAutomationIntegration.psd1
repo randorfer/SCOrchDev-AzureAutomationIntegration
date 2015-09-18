@@ -12,7 +12,7 @@
 RootModule = '.\SCOrchDev-AzureAutomationIntegration.psm1'
 
 # Version number of this module.
-ModuleVersion = '2.0.3'
+ModuleVersion = '2.0.4'
 
 # ID used to uniquely identify this module
 GUID = '1dafd04a-a2c2-4245-a2ba-69bfcd6bfe0a'
@@ -48,7 +48,7 @@ PowerShellVersion = '4.0'
 # ProcessorArchitecture = ''
 
 # Modules that must be imported into the global environment prior to importing this module
-RequiredModules = @('SCOrchDev-Utility', 'SCOrchDev-GitIntegration', 'SCOrchDev-Exception', 'SCOrchDev-File'<#, 'Azure'#>)
+RequiredModules = @('SCOrchDev-Utility', 'SCOrchDev-GitIntegration', 'SCOrchDev-Exception', 'SCOrchDev-File')
 
 # Assemblies that must be loaded prior to importing this module
 # RequiredAssemblies = @()
