@@ -809,9 +809,6 @@ Function Sync-GitRepositoryToAzureAutomation
                                                                                     -RepositoryName $RepositoryName `
                                                                                     -Commit $RepositoryChange.CurrentCommit) -as [string]
 
-            $null = Set-AutomationVariable -Name 'ContinuousIntegration-RepositoryInformation' `
-                                           -Value $UpdatedRepositoryInformation
-
             Write-Verbose -Message "Finished Processing [$($RepositoryInformation.CurrentCommit)..$($RepositoryChange.CurrentCommit)]"
         }
     }
@@ -821,5 +818,6 @@ Function Sync-GitRepositoryToAzureAutomation
     }
 
     Write-Verbose -Message 'Completed [Sync-GitRepositoryToAzureAutomation]'
+    Return (Select-FirstValid -Value @($UpdatedRepositoryInformation, $RepositoryInformationJSON))
 }
 Export-ModuleMember -Function * -Verbose:$false
