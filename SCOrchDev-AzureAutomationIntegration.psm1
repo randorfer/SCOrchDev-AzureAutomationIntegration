@@ -74,10 +74,12 @@ Function Publish-AzureAutomationRunbookChange
             $NewVersion = $TagUpdate.NewVersion
             if($NewVersion)
             {
-                $Runbook = Set-AzureAutomationRunbookDefinition -Name $WorkflowName `
-                                                                -Path $FilePath `
+                $null = Import-AzureAutomationRunbook -Path $FilePath -Tags $TagLine.Split(';') -AutomationAccountName $AutomationAccountName -ResourceGroupName $ResourceGroupName
+                $Runbook = Set-AzureAutomationRunbook -Name $WorkflowName `
+                                                      -Path $FilePath `
                                                                 -Overwrite `
-                                                                -AutomationAccountName $AutomationAccountName
+                                                                -AutomationAccountName $AutomationAccountName `
+                                                                -
                 $TagUpdate = Set-AzureAutomationRunbook -Name $WorkflowName `
                                                         -Tags $TagLine.Split(';') `
                                                         -AutomationAccountName $AutomationAccountName `
@@ -223,7 +225,7 @@ Function Publish-AzureAutomationSettingsFileChange
                 $Exception = New-Exception -Type 'VariablePublishFailure' `
                                            -Message 'Failed to publish a variable to Azure Automation' `
                                            -Property @{
-                    'ErrorMessage' = Convert-ExceptionToString $_ ;
+                    'ErrorMessage' = Convert-ExceptionToString -Exception $_ ;
                     'VariableName' = $VariableName ;
                 }
                 Write-Warning -Message $Exception -WarningAction Continue
@@ -401,7 +403,7 @@ Function Remove-AzureAutomationOrphanAsset
                     $Exception = New-Exception -Type 'RemoveAAAssetFailure' `
                                                 -Message 'Failed to remove an AA Asset' `
                                                 -Property @{
-                        'ErrorMessage' = (Convert-ExceptionToString $_) ;
+                        'ErrorMessage' = (Convert-ExceptionToString -Exception $_) ;
                         'AssetName' = $Difference.InputObject ;
                         'AssetType' = 'Variable' ;
                         'AutomationAccountName' = $AutomationAccountName ;
@@ -445,7 +447,7 @@ Function Remove-AzureAutomationOrphanAsset
                     $Exception = New-Exception -Type 'RemoveAAAssetFailure' `
                                                 -Message 'Failed to remove an AA Asset' `
                                                 -Property @{
-                        'ErrorMessage' = (Convert-ExceptionToString $_) ;
+                        'ErrorMessage' = (Convert-ExceptionToString -Exception $_) ;
                         'AssetName' = $Difference.InputObject ;
                         'AssetType' = 'Schedule' ;
                         'AutomationAccountName' = $AutomationAccountName ;
@@ -466,7 +468,7 @@ Function Remove-AzureAutomationOrphanAsset
         $Exception = New-Exception -Type 'RemoveAzureAutomationOrphanAssetWorkflowFailure' `
                                    -Message 'Unexpected error encountered in the Remove-AzureAutomationOrphanAsset workflow' `
                                    -Property @{
-            'ErrorMessage' = (Convert-ExceptionToString $_) ;
+            'ErrorMessage' = (Convert-ExceptionToString -Exception $_) ;
             'RepositoryName' = $RepositoryName ;
         }
         Write-Exception -Exception $Exception -Stream Warning
@@ -541,7 +543,7 @@ Function Remove-AzureAutomationOrphanRunbook
                     $Exception = New-Exception -Type 'RemoveAzureAutomationRunbookFailure' `
                                                 -Message 'Failed to remove a Azure Automation Runbook' `
                                                 -Property @{
-                        'ErrorMessage' = (Convert-ExceptionToString $_) ;
+                        'ErrorMessage' = (Convert-ExceptionToString -Exception $_) ;
                         'Name' = $Difference.InputObject ;
                         'AutomationAccount' = $AutomationAccountName ;
                     }
@@ -555,7 +557,7 @@ Function Remove-AzureAutomationOrphanRunbook
         $Exception = New-Exception -Type 'RemoveAzureAutomationOrphanRunbookWorkflowFailure' `
                                    -Message 'Unexpected error encountered in the Remove-AzureAutomationOrphanRunbook workflow' `
                                    -Property @{
-            'ErrorMessage' = (Convert-ExceptionToString $_) ;
+            'ErrorMessage' = (Convert-ExceptionToString -Exception $_) ;
             'RepositoryName' = $RepositoryName ;
         }
         Write-Exception -Exception $Exception -Stream Warning
@@ -666,7 +668,7 @@ Function Connect-AzureAutomationAccount
     $Null = $(
         $VBP = $VerbosePreference
         $VerbosePreference = [System.Management.Automation.ActionPreference]::SilentlyContinue
-        Switch-AzureMode AzureResourceManager
+        Switch-AzureMode -Name AzureResourceManager
         $AzureAccount = Get-AzureAccount
         if($AzureAccount.Id -ne $Credential.UserName)
         {
@@ -804,7 +806,7 @@ Function Sync-GitRepositoryToAzureAutomation
                             $Exception = New-Exception -Type 'PowerShellModulePathValidationError' `
                                                -Message 'Failed to set PSModulePath' `
                                                -Property @{
-                                'ErrorMessage' = (Convert-ExceptionToString $_) ;
+                                'ErrorMessage' = (Convert-ExceptionToString -String $_) ;
                                 'RepositoryModulePath' = $RepositoryModulePath ;
                                 'RunbookWorker' = $env:COMPUTERNAME ;
                             }
