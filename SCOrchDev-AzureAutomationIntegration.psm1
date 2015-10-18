@@ -114,7 +114,29 @@ Function Publish-AzureAutomationRunbookChange
     }
     Catch
     {
-        Write-Exception -Stream Warning -Exception $_
+        $Exception = $_
+        $ExceptionInfo = Get-ExceptionInfo -Exception $Exception
+        Switch ($Exception.FullyQualifiedErrorId)
+        {
+            'Microsoft.Azure.Commands.Automation.Common.ResourceCommonException,Microsoft.Azure.Commands.Automation.Cmdlet.GetAzureAutomationRunbook'
+            {
+                Write-Verbose -Message "[$Name] Initial Import"
+            
+                $TagLine = "RepositoryName:$RepositoryName;CurrentCommit:$CurrentCommit;"
+                $Runbook = New-AzureRmAutomationRunbook -Path $FilePath `
+                                                        -Tags $TagLine.Split(';') `
+                                                        -AutomationAccountName $AutomationAccountName `
+                                                        -Name $Name `
+                                                        -Type $Type
+                $Null = Publish-AzureRmAutomationRunbook -Name $Name `
+                                                     -AutomationAccountName $AutomationAccountName `
+                                                     -ResourceGroupName $ResourceGroupName
+            }
+            Default
+            {
+                Write-Exception -Stream Warning -Exception $_
+            }
+        }
     }
 
     Write-CompletedMessage @CompletedParams
@@ -179,11 +201,9 @@ Function Publish-AzureAutomationSettingsFileChange
             {
                 Write-Verbose -Message "[$VariableName] Updating"
                 $Variable = $Variables."$VariableName"
-                $ErrorActionPreference = [System.Management.Automation.ActionPreference]::SilentlyContinue
                 $AzureAutomationVariable = Get-AzureRmAutomationVariable -Name $VariableName `
                                                                          -AutomationAccountName $AutomationAccountName `
-                                                                         -ResourceGroupName $ResourceGroupName
-                $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
+                                                                         -ResourceGroupName $ResourceGroupName -ErrorAction SilentlyContinue
                 if($AzureAutomationVariable -as [bool])
                 {
                     Write-Verbose -Message "[$($VariableName)] is an existing Variable"
@@ -229,13 +249,29 @@ Function Publish-AzureAutomationSettingsFileChange
             }
             Catch
             {
-                $Exception = New-Exception -Type 'VariablePublishFailure' `
-                                           -Message 'Failed to publish a variable to Azure Automation' `
-                                           -Property @{
-                    'ErrorMessage' = Convert-ExceptionToString -Exception $_ ;
-                    'VariableName' = $VariableName ;
+                $Exception = $_
+                $ExceptionInfo = Get-ExceptionInfo -Exception $Exception
+                Switch ($ExceptionInfo.FullyQualifiedErrorId)
+                {
+                    'Microsoft.Azure.Commands.Automation.Common.ResourceNotFoundException,Microsoft.Azure.Commands.Automation.Cmdlet.GetAzureAutomationVariable'
+                    {
+                        Write-Verbose -Message "[$($VariableName)] is a New Variable"
+                        $VariableDescription = "$($Variable.Description)`n`r__RepositoryName:$($RepositoryName);CurrentCommit:$($CurrentCommit);__"
+                        $VariableParameters = @{
+                            'Name' = $VariableName
+                            'Value' = $Variable.Value
+                            'Encrypted' = $Variable.isEncrypted
+                            'AutomationAccountName' = $AutomationAccountName
+                            'ResourceGroupName' = $ResourceGroupName
+                            'Description' = $VariableDescription
+                        }
+                        $Null = New-AzureRmAutomationVariable @VariableParameters
+                    }
+                    Default
+                    {
+                        Write-Exception -Exception $Exception -Stream Warning
+                    }
                 }
-                Write-Warning -Message $Exception -WarningAction Continue
             }
         }
         $SchedulesJSON = Get-GlobalFromFile -FilePath $FilePath -GlobalType Schedules
@@ -298,41 +334,59 @@ Function Publish-AzureAutomationSettingsFileChange
                             'AutomationAccountName' = $AutomationAccountName
                         }
                     }
-                    try
+                }
+            }
+            catch
+            {
+                $Exception = $_
+                $ExceptionInfo = Get-ExceptionInfo -Exception $Exception
+                Switch ($Exception.FullyQualifiedErrorId)
+                {
+                    'Microsoft.Azure.Commands.Automation.Common.ResourceNotFoundException,Microsoft.Azure.Commands.Automation.Cmdlet.GetAzureAutomationVariable'
                     {
-                        $Parameters = ConvertFrom-PSCustomObject -InputObject $Schedule.Parameter `
-                                                                 -MemberType NoteProperty
-                        $Register = Register-AzureRmAutomationScheduledRunbook -AutomationAccountName $AutomationAccountName `
-                                                                               -RunbookName $Schedule.RunbookName `
-                                                                               -ScheduleName $ScheduleName `
-                                                                               -Parameters $Parameters `
-                                                                               -ResourceGroupName $ResourceGroupName
-                        if(-not($Register -as [bool]))
-                        {
-                            Throw-Exception -Type 'ScheduleFailedToSet' `
-                                            -Message 'Failed to set the schedule on the target runbook' `
-                                            -Property @{
-                                'ScheduleName' = $ScheduleName ;
-                                'RunbookName' = $Schedule.RunbookName ;
-                                'Parameters' = $(ConvertTo-Json -InputObject $Parameters) ;
-                                'AutomationAccountName' = $AutomationAccountName
-                            }
-                        }
+                        Write-Verbose -Message "[$Name] Initial Import"
+            
+                        Write-Verbose -Message "[$($ScheduleName)] is a New Schedule"
+                        $ScheduleDescription = "$($Schedule.Description)`n`r__RepositoryName:$($RepositoryName);CurrentCommit:$($CurrentCommit);__"
+                    
+                        $NewVersion = $True
                     }
-                    catch
+                    Default
                     {
-                        $ErrorActionPreference = [System.Management.Automation.ActionPreference]::SilentlyContinue
-                        Remove-AzureRmAutomationSchedule -Name $ScheduleName `
-                                                         -Force `
-                                                         -AutomationAccountName $AutomationAccountName `
-                                                         -ResourceGroupName $ResourceGroupName
-                        $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
-                        Write-Exception -Exception $_ -Stream Warning
+                        Write-Exception -Stream Warning -Exception $_
+                    }
+                }
+                Write-Exception -Exception $_ -Stream Warning
+            }
+            try
+            {
+                $Parameters = ConvertFrom-PSCustomObject -InputObject $Schedule.Parameter `
+                                                            -MemberType NoteProperty
+                $Register = Register-AzureRmAutomationScheduledRunbook -AutomationAccountName $AutomationAccountName `
+                                                                        -RunbookName $Schedule.RunbookName `
+                                                                        -ScheduleName $ScheduleName `
+                                                                        -Parameters $Parameters `
+                                                                        -ResourceGroupName $ResourceGroupName
+                if(-not($Register -as [bool]))
+                {
+                    Throw-Exception -Type 'ScheduleFailedToSet' `
+                                    -Message 'Failed to set the schedule on the target runbook' `
+                                    -Property @{
+                        'ScheduleName' = $ScheduleName ;
+                        'RunbookName' = $Schedule.RunbookName ;
+                        'Parameters' = $(ConvertTo-Json -InputObject $Parameters) ;
+                        'AutomationAccountName' = $AutomationAccountName
                     }
                 }
             }
             catch
             {
+                $ErrorActionPreference = [System.Management.Automation.ActionPreference]::SilentlyContinue
+                Remove-AzureRmAutomationSchedule -Name $ScheduleName `
+                                                    -Force `
+                                                    -AutomationAccountName $AutomationAccountName `
+                                                    -ResourceGroupName $ResourceGroupName
+                $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
                 Write-Exception -Exception $_ -Stream Warning
             }
             Write-Verbose -Message "[$($ScheduleName)] Finished Updating"
