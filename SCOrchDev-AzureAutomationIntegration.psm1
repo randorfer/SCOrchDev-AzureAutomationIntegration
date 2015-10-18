@@ -49,22 +49,29 @@ Function Publish-AzureAutomationRunbookChange
 
     Try
     {
-        Connect-AzureAutomationAccount -Credential $Credential `
-                                       -SubscriptionName $SubscriptionName `
-                                       -AutomationAccountName $AutomationAccountName `
-                                       -ResourceGroupName $ResourceGroupName
+        $Null = Add-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName
 
-        $WorkflowName = Get-WorkflowNameFromFile -FilePath $FilePath
+        if(Test-FileIsWorkflow -FilePath $FilePath)
+        {
+            $Name = Get-WorkflowNameFromFile -FilePath $FilePath
+            $Type = 'PowerShellWorkflow'
+        }
+        else
+        {
+            $Name = Get-ScriptNameFromFileName -FilePath $FilePath
+            $Type = 'PowerShell'
+        }
+        $Name = Get-WorkflowNameFromFile -FilePath $FilePath
         
         $ErrorActionPreference = [System.Management.Automation.ActionPreference]::SilentlyContinue
-        $Runbook = Get-AzureAutomationRunbook -Name $WorkflowName `
-                                              -AutomationAccountName $AutomationAccountName `
-                                              -ResourceGroupName $ResourceGroupName
+        $Runbook = Get-AzureRmAutomationRunbook -Name $Name `
+                                                -AutomationAccountName $AutomationAccountName `
+                                                -ResourceGroupName $ResourceGroupName
         $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
 
         if($Runbook -as [bool])
         {
-            Write-Verbose -Message "[$WorkflowName] Update"
+            Write-Verbose -Message "[$Name] Update"
             $TagUpdateJSON = New-ChangesetTagLine -TagLine ($Runbook.Tags -join ';') `
                                                   -CurrentCommit $CurrentCommit `
                                                   -RepositoryName $RepositoryName
@@ -73,37 +80,36 @@ Function Publish-AzureAutomationRunbookChange
             $NewVersion = $TagUpdate.NewVersion
             if($NewVersion)
             {
-                $null = Import-AzureAutomationRunbook -Path $FilePath -Tags $TagLine.Split(';') -AutomationAccountName $AutomationAccountName -ResourceGroupName $ResourceGroupName
-                $Runbook = Set-AzureAutomationRunbook -Name $WorkflowName `
-                                                      -Path $FilePath `
-                                                                -Overwrite `
-                                                                -AutomationAccountName $AutomationAccountName `
-                                                                -
-                $TagUpdate = Set-AzureAutomationRunbook -Name $WorkflowName `
+                $null = Import-AzureRmAutomationRunbook -Path $FilePath `
                                                         -Tags $TagLine.Split(';') `
+                                                        -Name $Name `
+                                                        -Type $Type `
                                                         -AutomationAccountName $AutomationAccountName `
                                                         -ResourceGroupName $ResourceGroupName
             }
             else
             {
-                Write-Verbose -Message "[$WorkflowName] Already is at commit [$CurrentCommit]"
+                Write-Verbose -Message "[$Name] Already is at commit [$CurrentCommit]"
             }
         }
         else
         {
-            Write-Verbose -Message "[$WorkflowName] Initial Import"
+            Write-Verbose -Message "[$Name] Initial Import"
             
             $TagLine = "RepositoryName:$RepositoryName;CurrentCommit:$CurrentCommit;"
-            $Runbook = New-AzureAutomationRunbook -Path $FilePath `
-                                                  -Tags $TagLine.Split(';') `
-                                                  -AutomationAccountName $AutomationAccountName
+            $Runbook = New-AzureRmAutomationRunbook -Path $FilePath `
+                                                    -Tags $TagLine.Split(';') `
+                                                    -AutomationAccountName $AutomationAccountName `
+                                                    -Name $Name `
+                                                    -Type $Type
             
             $NewVersion = $True
         }
         if($NewVersion)
         {
-            $Null = Publish-AzureAutomationRunbook -Name $WorkflowName `
-                                                   -AutomationAccountName $AutomationAccountName
+            $Null = Publish-AzureRmAutomationRunbook -Name $Name `
+                                                     -AutomationAccountName $AutomationAccountName `
+                                                     -ResourceGroupName $ResourceGroupName
         }
     }
     Catch
@@ -151,7 +157,11 @@ Function Publish-AzureAutomationSettingsFileChange
 
         [Parameter(Mandatory = $True)]
         [String]
-        $SubscriptionName
+        $SubscriptionName,
+
+        [Parameter(Mandatory = $True)]
+        [String]
+        $ResourceGroupName
     )
     
     $CompletedParams = Write-StartingMessage -String $FilePath
@@ -159,9 +169,7 @@ Function Publish-AzureAutomationSettingsFileChange
 
     Try
     {
-        Connect-AzureAutomationAccount -Credential $Credential `
-                                       -SubscriptionName $SubscriptionName `
-                                       -AutomationAccountName $AutomationAccountName
+        $Null = Add-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName
 
         $VariablesJSON = Get-GlobalFromFile -FilePath $FilePath -GlobalType Variables
         $Variables = $VariablesJSON | ConvertFrom-JSON | ConvertFrom-PSCustomObject
@@ -172,8 +180,9 @@ Function Publish-AzureAutomationSettingsFileChange
                 Write-Verbose -Message "[$VariableName] Updating"
                 $Variable = $Variables."$VariableName"
                 $ErrorActionPreference = [System.Management.Automation.ActionPreference]::SilentlyContinue
-                $AzureAutomationVariable = Get-AzureAutomationVariable -Name $VariableName `
-                                                                       -AutomationAccountName $AutomationAccountName
+                $AzureAutomationVariable = Get-AzureRmAutomationVariable -Name $VariableName `
+                                                                         -AutomationAccountName $AutomationAccountName `
+                                                                         -ResourceGroupName $ResourceGroupName
                 $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
                 if($AzureAutomationVariable -as [bool])
                 {
@@ -196,22 +205,20 @@ Function Publish-AzureAutomationSettingsFileChange
                 if($NewVersion)
                 {
                     $VariableParameters = @{
-                        'Name' = $VariableName ;
-                        'Value' = $Variable.Value ;
-                        'Encrypted' = $Variable.isEncrypted ;
+                        'Name' = $VariableName
+                        'Value' = $Variable.Value
+                        'Encrypted' = $Variable.isEncrypted
                         'AutomationAccountName' = $AutomationAccountName
+                        'ResourceGroupName' = $ResourceGroupName
+                        'Description' = $VariableDescription
                     }
                     if($NewVariable)
                     {
-                        $Null = New-AzureAutomationVariable @VariableParameters `
-                                                            -Description $VariableDescription
+                        $Null = New-AzureRmAutomationVariable @VariableParameters
                     }
                     else
                     {
-                        $Null = Set-AzureAutomationVariable @VariableParameters
-                        $Null = Set-AzureAutomationVariable -Name $VariableName `
-                                                            -Description $VariableDescription `
-                                                            -AutomationAccountName $AutomationAccountName
+                        $Null = Set-AzureRmAutomationVariable @VariableParameters
                     }
                 }
                 else
@@ -240,8 +247,9 @@ Function Publish-AzureAutomationSettingsFileChange
             {
                 $Schedule = $Schedules."$ScheduleName"
                 $ErrorActionPreference = [System.Management.Automation.ActionPreference]::SilentlyContinue
-                $AzureAutomationSchedule = Get-AzureAutomationSchedule -Name $ScheduleName `
-                                                                       -AutomationAccountName $AutomationAccountName
+                $AzureAutomationSchedule = Get-AzureRmAutomationSchedule -Name $ScheduleName `
+                                                                        -AutomationAccountName $AutomationAccountName `
+                                                                        -ResourceGroupName $ResourceGroupName
                 $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
                 if($AzureAutomationSchedule -as [bool])
                 {
@@ -255,9 +263,10 @@ Function Publish-AzureAutomationSettingsFileChange
                     if($NewVersion)
                     {
                         Write-Verbose -Message "[$($ScheduleName)] is an Updated Schedule. Deleting to re-create"
-                        Remove-AzureAutomationSchedule -Name $ScheduleName `
-                                                       -Force `
-                                                       -AutomationAccountName $AutomationAccountName
+                        Remove-AzureRmAutomationSchedule -Name $ScheduleName `
+                                                         -Force `
+                                                         -AutomationAccountName $AutomationAccountName `
+                                                         -ResourceGroupName $ResourceGroupName
                     }
                 }
                 else
@@ -269,12 +278,13 @@ Function Publish-AzureAutomationSettingsFileChange
                 }
                 if($NewVersion)
                 {
-                    $CreateSchedule = New-AzureAutomationSchedule -Name $ScheduleName `
-                                                                  -Description $ScheduleDescription `
-                                                                  -DayInterval $Schedule.DayInterval `
-                                                                  -StartTime $Schedule.NextRun `
-                                                                  -ExpiryTime $Schedule.ExpirationTime `
-                                                                  -AutomationAccountName $AutomationAccountName
+                    $CreateSchedule = New-AzureRmAutomationSchedule -Name $ScheduleName `
+                                                                    -Description $ScheduleDescription `
+                                                                    -DayInterval $Schedule.DayInterval `
+                                                                    -StartTime $Schedule.NextRun `
+                                                                    -ExpiryTime $Schedule.ExpirationTime `
+                                                                    -AutomationAccountName $AutomationAccountName `
+                                                                    -ResourceGroupName $ResourceGroupName
                     if(-not ($CreateSchedule -as [bool]))
                     {
                         Throw-Exception -Type 'ScheduleFailedToCreate' `
@@ -292,10 +302,11 @@ Function Publish-AzureAutomationSettingsFileChange
                     {
                         $Parameters = ConvertFrom-PSCustomObject -InputObject $Schedule.Parameter `
                                                                  -MemberType NoteProperty
-                        $Register = Register-AzureAutomationScheduledRunbook -AutomationAccountName $AutomationAccountName `
-                                                                             -RunbookName $Schedule.RunbookName `
-                                                                             -ScheduleName $ScheduleName `
-                                                                             -Parameters $Parameters
+                        $Register = Register-AzureRmAutomationScheduledRunbook -AutomationAccountName $AutomationAccountName `
+                                                                               -RunbookName $Schedule.RunbookName `
+                                                                               -ScheduleName $ScheduleName `
+                                                                               -Parameters $Parameters `
+                                                                               -ResourceGroupName $ResourceGroupName
                         if(-not($Register -as [bool]))
                         {
                             Throw-Exception -Type 'ScheduleFailedToSet' `
@@ -311,10 +322,11 @@ Function Publish-AzureAutomationSettingsFileChange
                     catch
                     {
                         $ErrorActionPreference = [System.Management.Automation.ActionPreference]::SilentlyContinue
-                        Remove-AzureAutomationSchedule -Name $ScheduleName `
-                                                       -Force `
-                                                       -AutomationAccountName $AutomationAccountName
-                                                       $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Continue
+                        Remove-AzureRmAutomationSchedule -Name $ScheduleName `
+                                                         -Force `
+                                                         -AutomationAccountName $AutomationAccountName `
+                                                         -ResourceGroupName $ResourceGroupName
+                        $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
                         Write-Exception -Exception $_ -Stream Warning
                     }
                 }
@@ -358,6 +370,10 @@ Function Remove-AzureAutomationOrphanAsset
 
         [Parameter(Mandatory = $True)]
         [String]
+        $ResourceGroupName,
+
+        [Parameter(Mandatory = $True)]
+        [String]
         $SubscriptionName,
 
         [Parameter(Mandatory = $True)]
@@ -369,11 +385,10 @@ Function Remove-AzureAutomationOrphanAsset
     $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
     Try
     {
-        Connect-AzureAutomationAccount -Credential $Credential `
-                                       -SubscriptionName $SubscriptionName `
-                                       -AutomationAccountName $AutomationAccountName
+        $Null = Add-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName
 
-        $AzureAutomationVariables = Get-AzureAutomationVariable -AutomationAccountName $AutomationAccountName
+        $AzureAutomationVariables = Get-AzureRmAutomationVariable -AutomationAccountName $AutomationAccountName `
+                                                                  -ResourceGroupName $ResourceGroupName
         if($AzureAutomationVariables) 
         {
             $AzureAutomationVariables = Group-AssetsByRepository -InputObject $AzureAutomationVariables 
@@ -392,16 +407,17 @@ Function Remove-AzureAutomationOrphanAsset
                     if($Difference.SideIndicator -eq '<=')
                     {
                         Write-Verbose -Message "[$($Difference.InputObject)] Does not exist in Source Control"
-                        Remove-AzureAutomationVariable -Name $Difference.InputObject `
-                                                       -AutomationAccountName $AutomationAccountName `
-                                                       -Force
+                        Remove-AzureRmAutomationVariable -Name $Difference.InputObject `
+                                                         -AutomationAccountName $AutomationAccountName `
+                                                         -ResourceGroupName $ResourceGroupName `
+                                                         -Force
                         Write-Verbose -Message "[$($Difference.InputObject)] Removed from Azure Automation"
                     }
                 }
                 Catch
                 {
-                    $Exception = New-Exception -Type 'RemoveAAAssetFailure' `
-                                                -Message 'Failed to remove an AA Asset' `
+                    $Exception = New-Exception -Type 'RemoveAzureAutomationAssetFailure' `
+                                                -Message 'Failed to remove an Azure Automation Asset' `
                                                 -Property @{
                         'ErrorMessage' = (Convert-ExceptionToString -Exception $_) ;
                         'AssetName' = $Difference.InputObject ;
@@ -415,11 +431,11 @@ Function Remove-AzureAutomationOrphanAsset
         }
         else
         {
-            Write-Warning -Message "[$RepositoryName] No Variables found in environment for this repository" `
-                          -WarningAction Continue
+            Write-Verbose -Message "[$RepositoryName] No Variables found in environment for this repository"
         }
 
-        $AzureAutomationSchedules = Get-AzureAutomationSchedule -AutomationAccountName $AutomationAccountName
+        $AzureAutomationSchedules = Get-AzureRmAutomationSchedule -AutomationAccountName $AutomationAccountName `
+                                                                  -ResourceGroupName $ResourceGroupName
         if($AzureAutomationSchedules) 
         {
             $AzureAutomationSchedules = Group-AssetsByRepository -InputObject $AzureAutomationSchedules 
@@ -436,16 +452,17 @@ Function Remove-AzureAutomationOrphanAsset
                     if($Difference.SideIndicator -eq '<=')
                     {
                         Write-Verbose -Message "[$($Difference.InputObject)] Does not exist in Source Control"
-                        Remove-AzureAutomationSchedule -Name $Difference.InputObject `
-                                                       -AutomationAccountName $AutomationAccountName `
-                                                       -Force
+                        Remove-AzureRmAutomationSchedule -Name $Difference.InputObject `
+                                                         -AutomationAccountName $AutomationAccountName `
+                                                         -ResourceGroupName $ResourceGroupName `
+                                                         -Force
                         Write-Verbose -Message "[$($Difference.InputObject)] Removed from Azure Automation"
                     }
                 }
                 Catch
                 {
-                    $Exception = New-Exception -Type 'RemoveAAAssetFailure' `
-                                                -Message 'Failed to remove an AA Asset' `
+                    $Exception = New-Exception -Type 'RemoveAzureAutomationAssetFailure' `
+                                                -Message 'Failed to remove an Azure Automation Asset' `
                                                 -Property @{
                         'ErrorMessage' = (Convert-ExceptionToString -Exception $_) ;
                         'AssetName' = $Difference.InputObject ;
@@ -459,8 +476,7 @@ Function Remove-AzureAutomationOrphanAsset
         }
         else
         {
-            Write-Warning -Message "[$RepositoryName] No Schedules found in environment for this repository" `
-                          -WarningAction Continue
+            Write-Verbose -Message "[$RepositoryName] No Schedules found in environment for this repository"
         }
     }
     Catch
@@ -502,6 +518,10 @@ Function Remove-AzureAutomationOrphanRunbook
 
         [Parameter(Mandatory = $True)]
         [String]
+        $ResourceGroupName,
+
+        [Parameter(Mandatory = $True)]
+        [String]
         $SubscriptionName,
 
         [Parameter(Mandatory = $True)]
@@ -513,11 +533,10 @@ Function Remove-AzureAutomationOrphanRunbook
     $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
     Try
     {
-        Connect-AzureAutomationAccount -Credential $Credential `
-                                       -SubscriptionName $SubscriptionName `
-                                       -AutomationAccountName $AutomationAccountName
+        $Null = Add-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName
 
-        $AzureAutomationRunbooks = Get-AzureAutomationRunbook -AutomationAccountName $AutomationAccountName
+        $AzureAutomationRunbooks = Get-AzureRmAutomationRunbook -AutomationAccountName $AutomationAccountName `
+                                                                -ResourceGroupName $ResourceGroupName
         if($AzureAutomationRunbooks) 
         {
             $AzureAutomationRunbooks = Group-RunbooksByRepository -InputObject $AzureAutomationRunbooks 
@@ -534,8 +553,10 @@ Function Remove-AzureAutomationOrphanRunbook
                 Try
                 {
                     Write-Verbose -Message "[$($Difference.InputObject)] Does not exist in Source Control"
-                    Remove-AzureAutomationRunbook -Name $Difference.InputObject `
-                                                  -AutomationAccountName $AutomationAccountName
+                    Remove-AzureRmAutomationRunbook -Name $Difference.InputObject `
+                                                    -AutomationAccountName $AutomationAccountName `
+                                                    -ResourceGroupName $ResourceGroupName `
+                                                    -Force
                     Write-Verbose -Message "[$($Difference.InputObject)] Removed from Azure Automation"
                 }
                 Catch
@@ -646,56 +667,6 @@ Function Get-AzureAutomationHybridRunbookWorker
 
 <#
 .Synopsis
-    Connects to an Azure Automation Account
-#>
-Function Connect-AzureAutomationAccount
-{
-    Param(
-        [Parameter(Mandatory = $True)]
-        [PSCredential]
-        $Credential,
-
-        [Parameter(Mandatory = $True)]
-        [string]
-        $SubscriptionName,
-
-        [Parameter(Mandatory = $True)]
-        [string]
-        $AutomationAccountName,
-
-        [Parameter(Mandatory = $True)]
-        [string]
-        $ResourceGroupName
-    )
-    $Null = $(
-        $VBP = $VerbosePreference
-        $VerbosePreference = [System.Management.Automation.ActionPreference]::SilentlyContinue
-        Switch-AzureMode -Name AzureResourceManager
-        $AzureAccount = Get-AzureAccount
-        if($AzureAccount.Id -ne $Credential.UserName)
-        {
-            $AzureAccount | ForEach-Object { Remove-AzureAccount -Name $_.Id -Force }
-            Add-AzureAccount -Credential $Credential
-        
-        }
-        Select-AzureSubscription -SubscriptionName $SubscriptionName
-        $AzureAccountAccessible = (Get-AzureAutomationAccount -Name $AutomationAccountName -ResourceGroupName $ResourceGroupName) -as [bool]
-        $VerbosePreference = [System.Management.Automation.ActionPreference]$VBP
-        if(-not $AzureAccountAccessible)
-        {
-            Throw-Exception -Type 'AzureAutomationAccountNotAccessible' `
-                            -Message 'Could not access the target Azure Automation Account' `
-                            -Property @{
-                                'Credential' = $Credential ;
-                                'SubscriptionName' = $SubscriptionName ;
-                                'AutomationAccountName' = $AutomationAccountName ;
-                            }
-        }
-    )
-}
-
-<#
-.Synopsis
     Top level function for syncing a target git Repository to Azure Automation
 #>
 Function Sync-GitRepositoryToAzureAutomation
@@ -727,6 +698,10 @@ Function Sync-GitRepositoryToAzureAutomation
 
         [Parameter(Mandatory = $True)]
         [string]
+        $ResourceGroupName,
+
+        [Parameter(Mandatory = $True)]
+        [string]
         $RepositoryName
     )
     
@@ -743,7 +718,7 @@ Function Sync-GitRepositoryToAzureAutomation
                     
             $RepositoryInformation = $Using:RepositoryInformation
             Update-GitRepository -RepositoryPath $RepositoryInformation.RepositoryPath `
-                                 -LocalPath $RepositoryInformation.Path `
+                                 -Path $RepositoryInformation.Path `
                                  -Branch $RepositoryInformation.Branch
         }
 
@@ -769,7 +744,8 @@ Function Sync-GitRepositoryToAzureAutomation
                                                           -RepositoryName $RepositoryName `
                                                           -Credential $SubscriptionAccessCredential `
                                                           -AutomationAccountName $AutomationAccountName `
-                                                          -SubscriptionName $SubscriptionName
+                                                          -SubscriptionName $SubscriptionName `
+                                                          -ResourceGroupName $ResourceGroupName
             }
             Foreach($RunbookFilePath in $ReturnInformation.ScriptFiles)
             {
@@ -778,7 +754,8 @@ Function Sync-GitRepositoryToAzureAutomation
                                                      -RepositoryName $RepositoryName `
                                                      -Credential $SubscriptionAccessCredential `
                                                      -AutomationAccountName $AutomationAccountName `
-                                                     -SubscriptionName $SubscriptionName
+                                                     -SubscriptionName $SubscriptionName `
+                                                     -ResourceGroupName $ResourceGroupName
             }
             
             if($ReturnInformation.CleanRunbooks)
@@ -787,7 +764,8 @@ Function Sync-GitRepositoryToAzureAutomation
                                                     -SubscriptionName $SubscriptionName `
                                                     -AutomationAccountName $AutomationAccountName `
                                                     -Credential $SubscriptionAccessCredential `
-                                                    -RepositoryInformation $RepositoryInformation
+                                                    -RepositoryInformation $RepositoryInformation `
+                                                    -ResourceGroupName $ResourceGroupName
             }
             if($ReturnInformation.CleanAssets)
             {
@@ -795,7 +773,8 @@ Function Sync-GitRepositoryToAzureAutomation
                                                   -SubscriptionName $SubscriptionName `
                                                   -AutomationAccountName $AutomationAccountName `
                                                   -Credential $SubscriptionAccessCredential `
-                                                  -RepositoryInformation $RepositoryInformation
+                                                  -RepositoryInformation $RepositoryInformation `
+                                                  -ResourceGroupName $ResourceGroupName
             }
             if($ReturnInformation.ModuleFiles)
             {
