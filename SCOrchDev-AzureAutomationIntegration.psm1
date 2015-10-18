@@ -721,7 +721,7 @@ Function Get-BatchAutomationVariable
 Function Get-AzureAutomationHybridRunbookWorker
 {
     Param(
-        [Parameter(Mandatory = $True)]
+        [Parameter(Mandatory = $False)]
         [String[]]
         $Name
     )
