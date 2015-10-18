@@ -835,4 +835,48 @@ Function Sync-GitRepositoryToAzureAutomation
     Write-Verbose -Message 'Completed [Sync-GitRepositoryToAzureAutomation]'
     Return (Select-FirstValid -Value @($UpdatedRepositoryInformation, $RepositoryInformationJSON))
 }
+
+<#
+    .Synopsis
+        Invokes test suites on the Runbooks and PowerShell modules
+#>
+Function Invoke-IntegrationTest
+{
+    Param(
+        [Parameter(
+            Mandatory = $True,
+            Position = 0,
+            ValueFromPipeline = $True
+        )]
+        [string]
+        $Path
+    )
+    $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
+    $CompletedParameters = Write-StartingMessage
+    $Result = @{ 'Pester' = $null ; 'PSScriptAnalyzer'  = $null }
+    Try
+    {
+        if((Get-Module -Name Pester -ListAvailable) -as [bool])
+        {
+            $ChildItem = Get-ChildItem -Path $Path -Recurse -Include *.ps1,*.psm1 -Exclude *.tests.ps1
+            $Result.Pester = Invoke-Pester $Path -CodeCoverage $ChildItem.FullName -Quiet -PassThru
+        }
+        if((Get-Module -Name PSScriptAnalyzer -ListAvailable) -as [bool])
+        {
+            $Result.PSScriptAnalyzer = New-Object -TypeName System.Collections.ArrayList
+            $ChildItem = Get-ChildItem -Path $Path -Recurse -Include *.ps1,*.psm1 -Exclude *.tests.ps1
+            $ChildItem | ForEach-Object {
+                $AnalyzerResult = Invoke-ScriptAnalyzer -Path $_.FullName
+                $Null = $Result.PSScriptAnalyzer.Add(@{'FileName' = $_.FullName ; 'AnalyzerResult' = $AnalyzerResult })
+            }
+        }
+    }
+    Catch
+    {
+        Write-Exception -Exception $_ -Stream Warning
+    }
+
+    Write-CompletedMessage @CompletedParameters
+    Return $Result
+}
 Export-ModuleMember -Function * -Verbose:$false
