@@ -61,8 +61,6 @@ Function Publish-AzureAutomationRunbookChange
             $Name = Get-ScriptNameFromFileName -FilePath $FilePath
             $Type = 'PowerShell'
         }
-        $Name = Get-WorkflowNameFromFile -FilePath $FilePath
-        
         $ErrorActionPreference = [System.Management.Automation.ActionPreference]::SilentlyContinue
         $Runbook = Get-AzureRmAutomationRunbook -Name $Name `
                                                 -AutomationAccountName $AutomationAccountName `
@@ -77,17 +75,9 @@ Function Publish-AzureAutomationRunbookChange
                                                   -RepositoryName $RepositoryName
             $TagUpdate = ConvertFrom-Json -InputObject $TagUpdateJSON
             $TagLine = $TagUpdate.TagLine
+
             $NewVersion = $TagUpdate.NewVersion
-            if($NewVersion)
-            {
-                $null = Import-AzureRmAutomationRunbook -Path $FilePath `
-                                                        -Tags $TagLine.Split(';') `
-                                                        -Name $Name `
-                                                        -Type $Type `
-                                                        -AutomationAccountName $AutomationAccountName `
-                                                        -ResourceGroupName $ResourceGroupName
-            }
-            else
+            if(-not ($NewVersion -as [bool]))
             {
                 Write-Verbose -Message "[$Name] Already is at commit [$CurrentCommit]"
             }
@@ -97,16 +87,25 @@ Function Publish-AzureAutomationRunbookChange
             Write-Verbose -Message "[$Name] Initial Import"
             
             $TagLine = "RepositoryName:$RepositoryName;CurrentCommit:$CurrentCommit;"
-            $Runbook = New-AzureRmAutomationRunbook -Path $FilePath `
-                                                    -Tags $TagLine.Split(';') `
-                                                    -AutomationAccountName $AutomationAccountName `
-                                                    -Name $Name `
-                                                    -Type $Type
-            
+            $Tags = @{}
+            Foreach($Tag in $TagLine.Split(';')) { $Null = $Tags.Add($Tag.Split(':')[0],$Tag.Split(':')[1]) }
+            $Null = New-AzureRmAutomationRunbook -Name $Name `
+                                                     -Tags $Tags `
+                                                     -Type $Type `
+                                                     -ResourceGroupName $ResourceGroupName `
+                                                     -AutomationAccountName $AutomationAccountName
             $NewVersion = $True
         }
         if($NewVersion)
         {
+            $Tags = @{}
+            Foreach($Tag in $TagLine.Split(';')) { $Null = $Tags.Add($Tag.Split(':')[0],$Tag.Split(':')[1]) }
+            $Null = Import-AzureRmAutomationRunbook -Path $FilePath `
+                                                    -Tags $Tags `
+                                                    -Name $Name `
+                                                    -Type $Type `
+                                                    -AutomationAccountName $AutomationAccountName `
+                                                    -ResourceGroupName $ResourceGroupName
             $Null = Publish-AzureRmAutomationRunbook -Name $Name `
                                                      -AutomationAccountName $AutomationAccountName `
                                                      -ResourceGroupName $ResourceGroupName
@@ -114,6 +113,7 @@ Function Publish-AzureAutomationRunbookChange
     }
     Catch
     {
+        $ErrorActionPreference = 'Stop'
         $Exception = $_
         $ExceptionInfo = Get-ExceptionInfo -Exception $Exception
         Switch ($Exception.FullyQualifiedErrorId)
@@ -123,14 +123,24 @@ Function Publish-AzureAutomationRunbookChange
                 Write-Verbose -Message "[$Name] Initial Import"
             
                 $TagLine = "RepositoryName:$RepositoryName;CurrentCommit:$CurrentCommit;"
-                $Runbook = New-AzureRmAutomationRunbook -Path $FilePath `
-                                                        -Tags $TagLine.Split(';') `
-                                                        -AutomationAccountName $AutomationAccountName `
+                $Tags = @{}
+                Foreach($Tag in $TagLine.Split(';')) { $Null = $Tags.Add($Tag.Split(':')[0],$Tag.Split(':')[1]) }
+                $Null = New-AzureRmAutomationRunbook -Name $Name `
+                                                     -Tags $Tags `
+                                                     -Type $Type `
+                                                     -ResourceGroupName $ResourceGroupName `
+                                                     -AutomationAccountName $AutomationAccountName
+
+                $Null = Import-AzureRmAutomationRunbook -Path $FilePath `
+                                                        -Tags $Tags `
                                                         -Name $Name `
-                                                        -Type $Type
+                                                        -Type $Type `
+                                                        -AutomationAccountName $AutomationAccountName `
+                                                        -ResourceGroupName $ResourceGroupName
+                
                 $Null = Publish-AzureRmAutomationRunbook -Name $Name `
-                                                     -AutomationAccountName $AutomationAccountName `
-                                                     -ResourceGroupName $ResourceGroupName
+                                                         -AutomationAccountName $AutomationAccountName `
+                                                         -ResourceGroupName $ResourceGroupName
             }
             Default
             {
