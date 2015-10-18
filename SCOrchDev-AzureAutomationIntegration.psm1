@@ -330,7 +330,7 @@ Function Publish-AzureAutomationSettingsFileChange
     {
         Write-Exception -Stream Warning -Exception $_
     }
-    Write-CompletedMessage @CompletedParameters
+    Write-CompletedMessage @CompletedParams
 }
 <#
 .Synopsis
@@ -473,7 +473,7 @@ Function Remove-AzureAutomationOrphanAsset
         }
         Write-Exception -Exception $Exception -Stream Warning
     }
-    Write-CompletedMessage @CompletedParameters
+    Write-CompletedMessage @CompletedParams
 }
 
 <#
@@ -562,7 +562,7 @@ Function Remove-AzureAutomationOrphanRunbook
         }
         Write-Exception -Exception $Exception -Stream Warning
     }
-    Write-CompletedMessage @CompletedParameters
+    Write-CompletedMessage @CompletedParams
 }
 
 <#
@@ -626,7 +626,7 @@ Function Get-BatchAutomationVariable
         $Variables[$VarName] = $Result
         Write-Verbose -Message "Variable [$Prefix / $VarName] = [$($Variables[$VarName])]"
     }
-    Write-CompletedMessage @CompletedParameters
+    Write-CompletedMessage @CompletedParams
     Return ($Variables -as [hashtable])
 }
 <#
@@ -730,7 +730,7 @@ Function Sync-GitRepositoryToAzureAutomation
         $RepositoryName
     )
     
-    $CompletedParameters = Write-StartingMessage -String $RepositoryName
+    $CompletedParams = Write-StartingMessage -String $RepositoryName
     $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
     
     Try
@@ -839,7 +839,7 @@ Function Sync-GitRepositoryToAzureAutomation
         Write-Exception -Stream Warning -Exception $_
     }
 
-    Write-CompletedMessage @CompletedParameters
+    Write-CompletedMessage @CompletedParams
     Return (Select-FirstValid -Value @($UpdatedRepositoryInformation, $RepositoryInformationJSON))
 }
 
@@ -859,7 +859,7 @@ Function Invoke-IntegrationTest
         $Path
     )
     $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
-    $CompletedParameters = Write-StartingMessage
+    $CompletedParams = Write-StartingMessage
     $Result = @{ 'Pester' = $null ; 'PSScriptAnalyzer'  = $null }
     Try
     {
@@ -883,7 +883,7 @@ Function Invoke-IntegrationTest
         Write-Exception -Exception $_ -Stream Warning
     }
 
-    Write-CompletedMessage @CompletedParameters
+    Write-CompletedMessage @CompletedParams
     Return $Result
 }
 Export-ModuleMember -Function * -Verbose:$false
