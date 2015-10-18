@@ -44,8 +44,7 @@ Function Publish-AzureAutomationRunbookChange
         [String]
         $ResourceGroupName
     )
-    
-    Write-Verbose -Message "[$FilePath] Starting [Publish-AzureAutomationRunbookChange]"
+    $CompletedParams = Write-StartingMessage -String $FilePath
     $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
 
     Try
@@ -111,7 +110,8 @@ Function Publish-AzureAutomationRunbookChange
     {
         Write-Exception -Stream Warning -Exception $_
     }
-    Write-Verbose -Message "[$FilePath] Finished [Publish-AzureAutomationRunbookChange]"
+
+    Write-CompletedMessage @CompletedParams
 }
 <#
 .Synopsis
@@ -154,7 +154,7 @@ Function Publish-AzureAutomationSettingsFileChange
         $SubscriptionName
     )
     
-    Write-Verbose -Message "[$FilePath] Starting [Publish-AzureAutomationSettingsFileChange]"
+    $CompletedParams = Write-StartingMessage -String $FilePath
     $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
 
     Try
@@ -330,7 +330,7 @@ Function Publish-AzureAutomationSettingsFileChange
     {
         Write-Exception -Stream Warning -Exception $_
     }
-    Write-Verbose -Message "[$FilePath] Finished [Publish-AzureAutomationSettingsFileChange]"
+    Write-CompletedMessage @CompletedParameters
 }
 <#
 .Synopsis
@@ -365,7 +365,7 @@ Function Remove-AzureAutomationOrphanAsset
         $RepositoryInformation
     )
 
-    Write-Verbose -Message 'Starting [Remove-AzureAutomationOrphanAsset]'
+    $CompletedParams = Write-StartingMessage
     $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
     Try
     {
@@ -473,7 +473,7 @@ Function Remove-AzureAutomationOrphanAsset
         }
         Write-Exception -Exception $Exception -Stream Warning
     }
-    Write-Verbose -Message 'Finished [Remove-AzureAutomationOrphanAsset]'
+    Write-CompletedMessage @CompletedParameters
 }
 
 <#
@@ -509,7 +509,7 @@ Function Remove-AzureAutomationOrphanRunbook
         $RepositoryInformation
     )
 
-    Write-Verbose -Message 'Starting [Remove-AzureAutomationOrphanRunbook]'
+    $CompletedParams = Write-StartingMessage
     $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
     Try
     {
@@ -562,7 +562,7 @@ Function Remove-AzureAutomationOrphanRunbook
         }
         Write-Exception -Exception $Exception -Stream Warning
     }
-    Write-Verbose -Message 'Finished [Remove-AzureAutomationOrphanRunbook]'
+    Write-CompletedMessage @CompletedParameters
 }
 
 <#
@@ -608,6 +608,7 @@ Function Get-BatchAutomationVariable
         [String]
         $Prefix = $Null
     )
+    $CompletedParams = Write-StartingMessage -Stream Debug
     $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
     $Variables = @{}
     
@@ -625,6 +626,7 @@ Function Get-BatchAutomationVariable
         $Variables[$VarName] = $Result
         Write-Verbose -Message "Variable [$Prefix / $VarName] = [$($Variables[$VarName])]"
     }
+    Write-CompletedMessage @CompletedParameters
     Return ($Variables -as [hashtable])
 }
 <#
@@ -728,29 +730,35 @@ Function Sync-GitRepositoryToAzureAutomation
         $RepositoryName
     )
     
-    Write-Verbose -Message 'Starting [Sync-GitRepositoryToAzureAutomation]'
+    $CompletedParameters = Write-StartingMessage -String $RepositoryName
     $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
     
     Try
     {
         $RunbookWorker = Get-AzureAutomationHybridRunbookWorker -Name $RepositoryInformation.HybridWorkerGroup
         
-        # Update the repository on all SMA Workers
+        # Update the repository on all Workers
         Invoke-Command -ComputerName $RunbookWorker -Credential $RunbookWorkerAccessCredenial -ScriptBlock {
             $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
                     
             $RepositoryInformation = $Using:RepositoryInformation
-            Update-GitRepository -RepositoryInformation $RepositoryInformation
+            Update-GitRepository -RepositoryPath $RepositoryInformation.RepositoryPath `
+                                 -LocalPath $RepositoryInformation.Path `
+                                 -Branch $RepositoryInformation.Branch
         }
 
-        $RepositoryChangeJSON = Find-GitRepositoryChange -RepositoryInformation $RepositoryInformation
+        $RepositoryChangeJSON = Find-GitRepositoryChange -Path $RepositoryInformation.Path `
+                                                         -StartCommit $RepositoryInformation.CurrentCommit
         $RepositoryChange = ConvertFrom-Json -InputObject $RepositoryChangeJSON
         if($RepositoryChange.CurrentCommit -as [string] -ne $RepositoryInformation.CurrentCommit -as [string])
         {
             Write-Verbose -Message "Processing [$($RepositoryInformation.CurrentCommit)..$($RepositoryChange.CurrentCommit)]"
             Write-Verbose -Message "RepositoryChange [$RepositoryChangeJSON]"
-            $ReturnInformationJSON = Group-RepositoryFile -Files $RepositoryChange.Files `
-                                                          -RepositoryInformation $RepositoryInformation
+            $ReturnInformationJSON = Group-RepositoryFile -File $RepositoryChange.Files `
+                                                          -Path $RepositoryInformation.Path `
+                                                          -RunbookFolder $RepositoryInformation.RunbookFolder `
+                                                          -GlobalsFolder $RepositoryInformation.GlobalsFolder `
+                                                          -PowerShellModuleFolder $RepositoryInformation.PowerShellModuleFolder
             $ReturnInformation = ConvertFrom-Json -InputObject $ReturnInformationJSON
             Write-Verbose -Message "ReturnInformation [$ReturnInformationJSON]"
             
@@ -820,10 +828,9 @@ Function Sync-GitRepositoryToAzureAutomation
                     Write-Exception -Exception $_ -Stream Warning
                 }
             }
-            $UpdatedRepositoryInformation = (Set-RepositoryInformationCommitVersion -RepositoryInformation $RepositoryInformationJSON `
-                                                                                    -RepositoryName $RepositoryName `
-                                                                                    -Commit $RepositoryChange.CurrentCommit) -as [string]
-
+            $UpdatedRepositoryInformation = (Update-RepositoryInformationCommitVersion -RepositoryInformationJSON $RepositoryInformationJSON `
+                                                                                       -RepositoryName $RepositoryName `
+                                                                                       -Commit $RepositoryChange.CurrentCommit) -as [string]
             Write-Verbose -Message "Finished Processing [$($RepositoryInformation.CurrentCommit)..$($RepositoryChange.CurrentCommit)]"
         }
     }
@@ -832,7 +839,7 @@ Function Sync-GitRepositoryToAzureAutomation
         Write-Exception -Stream Warning -Exception $_
     }
 
-    Write-Verbose -Message 'Completed [Sync-GitRepositoryToAzureAutomation]'
+    Write-CompletedMessage @CompletedParameters
     Return (Select-FirstValid -Value @($UpdatedRepositoryInformation, $RepositoryInformationJSON))
 }
 
