@@ -646,8 +646,8 @@ Function Sync-GitRepositoryToAzureAutomation
             
             if($RepositoryChange.CurrentCommit -as [string] -ne $_RepositoryInformation.CurrentCommit -as [string])
             {
-                Write-Verbose -Message "Processing [$($RepositoryInformation.CurrentCommit)..$($RepositoryChange.CurrentCommit)]"
-                Write-Verbose -Message "RepositoryChange [$RepositoryChangeJSON]"
+                Write-Verbose -Message "Processing [$($_RepositoryInformation.CurrentCommit)..$($RepositoryChange.CurrentCommit)]"
+                Write-Verbose -Message "RepositoryChange [$($RepositoryChange | ConvertTo-Json)]"
                 $ReturnInformation = Group-RepositoryFile -File $RepositoryChange.Files `
                                                           -Path $_RepositoryInformation.Path `
                                                           -RunbookFolder $_RepositoryInformation.RunbookFolder `
@@ -727,7 +727,7 @@ Function Sync-GitRepositoryToAzureAutomation
                 $UpdatedRepositoryInformation = (Update-RepositoryInformationCommitVersion -RepositoryInformationJSON $RepositoryInformationJSON `
                                                                                            -RepositoryName $RepositoryName `
                                                                                            -Commit $RepositoryChange.CurrentCommit) -as [string]
-                Write-Verbose -Message "Finished Processing [$($RepositoryInformation.CurrentCommit)..$($RepositoryChange.CurrentCommit)]"
+                Write-Verbose -Message "Finished Processing [$($_RepositoryInformation.CurrentCommit)..$($RepositoryChange.CurrentCommit)]"
             }
         }
         Catch
