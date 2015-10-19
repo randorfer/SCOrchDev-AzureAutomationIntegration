@@ -743,10 +743,6 @@ Function Sync-GitRepositoryToAzureAutomation
         [Parameter(Mandatory = $True)]
         [pscredential]
         $RunbookWorkerAccessCredenial,
-
-        [Parameter(Mandatory = $True)]
-        [psobject]
-        $RepositoryInformation,
         
         [Parameter(Mandatory = $True)]
         [string]
@@ -762,11 +758,7 @@ Function Sync-GitRepositoryToAzureAutomation
 
         [Parameter(Mandatory = $True)]
         [string]
-        $ResourceGroupName,
-
-        [Parameter(Mandatory = $True)]
-        [string]
-        $RepositoryName
+        $ResourceGroupName
     )
     
     $CompletedParams = Write-StartingMessage -String $RepositoryName
