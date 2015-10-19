@@ -769,7 +769,7 @@ Function Sync-GitRepositoryToAzureAutomation
     {
         Try
         {
-            $_RepositoryInformation = $RepositoryInformation.$RespositoryName
+            $_RepositoryInformation = $RepositoryInformation.$RepositoryName
             $RunbookWorker = Get-AzureAutomationHybridRunbookWorker -Name $_RepositoryInformation.HybridWorkerGroup
         
             # Update the repository on all Workers
