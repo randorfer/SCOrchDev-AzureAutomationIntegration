@@ -51,65 +51,18 @@ Function Publish-AzureAutomationRunbookChange
     {
         $Null = Add-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName
 
-        if(Test-FileIsWorkflow -FilePath $FilePath)
-        {
-            $Name = Get-WorkflowNameFromFile -FilePath $FilePath
-            $Type = 'PowerShellWorkflow'
-        }
-        else
-        {
-            $Name = Get-ScriptNameFromFileName -FilePath $FilePath
-            $Type = 'PowerShell'
-        }
-        $ErrorActionPreference = [System.Management.Automation.ActionPreference]::SilentlyContinue
-        $Runbook = Get-AzureRmAutomationRunbook -Name $Name `
-                                                -AutomationAccountName $AutomationAccountName `
-                                                -ResourceGroupName $ResourceGroupName
-        $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
+        $RunbookInformation = Get-AzureAutomationRunbookInformation -FileName $FilePath `
+                                                                    -RepositoryName $RepositoryName `
+                                                                    -Credential $Credential `
+                                                                    -AutomationAccountName $AutomationAccountName `
+                                                                    -SubscriptionName $SubscriptionName `
+                                                                    -ResourceGroupName $ResourceGroupName `
+                                                                    -CurrentCommit $CurrentCommit
 
-        if($Runbook -as [bool])
-        {
-            Write-Verbose -Message "[$Name] Update"
-            $TagUpdateJSON = New-ChangesetTagLine -TagLine ($Runbook.Tags -join ';') `
-                                                  -CurrentCommit $CurrentCommit `
-                                                  -RepositoryName $RepositoryName
-            $TagUpdate = ConvertFrom-Json -InputObject $TagUpdateJSON
-            $TagLine = $TagUpdate.TagLine
-
-            $NewVersion = $TagUpdate.NewVersion
-            if(-not ($NewVersion -as [bool]))
-            {
-                Write-Verbose -Message "[$Name] Already is at commit [$CurrentCommit]"
-            }
-        }
-        else
-        {
-            Write-Verbose -Message "[$Name] Initial Import"
-            
-            $TagLine = "RepositoryName:$RepositoryName;CurrentCommit:$CurrentCommit;"
-            $Tags = @{}
-            Foreach($Tag in $TagLine.Split(';')) { $Null = $Tags.Add($Tag.Split(':')[0],$Tag.Split(':')[1]) }
-            $Null = New-AzureRmAutomationRunbook -Name $Name `
-                                                     -Tags $Tags `
-                                                     -Type $Type `
-                                                     -ResourceGroupName $ResourceGroupName `
-                                                     -AutomationAccountName $AutomationAccountName
-            $NewVersion = $True
-        }
-        if($NewVersion)
-        {
-            $Tags = @{}
-            Foreach($Tag in $TagLine.Split(';')) { $Null = $Tags.Add($Tag.Split(':')[0],$Tag.Split(':')[1]) }
-            $Null = Import-AzureRmAutomationRunbook -Path $FilePath `
-                                                    -Tags $Tags `
-                                                    -Name $Name `
-                                                    -Type $Type `
-                                                    -AutomationAccountName $AutomationAccountName `
-                                                    -ResourceGroupName $ResourceGroupName
-            $Null = Publish-AzureRmAutomationRunbook -Name $Name `
-                                                     -AutomationAccountName $AutomationAccountName `
-                                                     -ResourceGroupName $ResourceGroupName
-        }
+        $Null = Import-AzureRmAutomationRunbook @RunbookInformation
+        $Null = Publish-AzureRmAutomationRunbook -Name $RunbookInformation.Name `
+                                                 -AutomationAccountName $AutomationAccountName `
+                                                 -ResourceGroupName $ResourceGroupName
     }
     Catch
     {
@@ -606,7 +559,7 @@ Function Remove-AzureAutomationOrphanRunbook
             $AzureAutomationRunbooks = Group-RunbooksByRepository -InputObject $AzureAutomationRunbooks 
         }
 
-        $RepositoryWorkflows = Get-GitRepositoryWorkflowName -Path "$($RepositoryInformation.Path)\$($RepositoryInformation.RunbookFolder)"
+        $RepositoryWorkflows = Get-GitRepositoryRunbookName -Path "$($RepositoryInformation.Path)\$($RepositoryInformation.RunbookFolder)"
         $Differences = Compare-Object -ReferenceObject $AzureAutomationRunbooks.$RepositoryName.Name `
                                       -DifferenceObject $RepositoryWorkflows
     
@@ -782,20 +735,18 @@ Function Sync-GitRepositoryToAzureAutomation
                                      -Branch $_RepositoryInformation.Branch
             }
 
-            $RepositoryChangeJSON = Find-GitRepositoryChange -Path $_RepositoryInformation.Path `
-                                                             -StartCommit $_RepositoryInformation.CurrentCommit
-            $RepositoryChange = ConvertFrom-Json -InputObject $RepositoryChangeJSON
+            $RepositoryChange = Find-GitRepositoryChange -Path $_RepositoryInformation.Path `
+                                                         -StartCommit $_RepositoryInformation.CurrentCommit
+            
             if($RepositoryChange.CurrentCommit -as [string] -ne $_RepositoryInformation.CurrentCommit -as [string])
             {
                 Write-Verbose -Message "Processing [$($RepositoryInformation.CurrentCommit)..$($RepositoryChange.CurrentCommit)]"
                 Write-Verbose -Message "RepositoryChange [$RepositoryChangeJSON]"
-                $ReturnInformationJSON = Group-RepositoryFile -File $RepositoryChange.Files `
-                                                              -Path $_RepositoryInformation.Path `
-                                                              -RunbookFolder $_RepositoryInformation.RunbookFolder `
-                                                              -GlobalsFolder $_RepositoryInformation.GlobalsFolder `
-                                                              -PowerShellModuleFolder $_RepositoryInformation.PowerShellModuleFolder
-                $ReturnInformation = ConvertFrom-Json -InputObject $ReturnInformationJSON
-                Write-Verbose -Message "ReturnInformation [$ReturnInformationJSON]"
+                $ReturnInformation = Group-RepositoryFile -File $RepositoryChange.Files `
+                                                          -Path $_RepositoryInformation.Path `
+                                                          -RunbookFolder $_RepositoryInformation.RunbookFolder `
+                                                          -GlobalsFolder $_RepositoryInformation.GlobalsFolder `
+                                                          -PowerShellModuleFolder $_RepositoryInformation.PowerShellModuleFolder
             
                 Foreach($SettingsFilePath in $ReturnInformation.SettingsFiles)
                 {
@@ -925,5 +876,163 @@ Function Invoke-IntegrationTest
 
     Write-CompletedMessage @CompletedParams
     Return $Result
+}
+<#
+    .Synopsis
+        Check to see if the target Runbook already exists in Azure Automation
+#>
+Function Test-AzureAutomationRunbookExist
+{
+    Param(
+        [Parameter(Mandatory = $True)]
+        [String] 
+        $Name,
+
+        [Parameter(Mandatory = $True)]
+        [PSCredential]
+        $Credential,
+
+        [Parameter(Mandatory = $True)]
+        [String]
+        $AutomationAccountName,
+
+        [Parameter(Mandatory = $True)]
+        [String]
+        $SubscriptionName,
+
+        [Parameter(Mandatory = $True)]
+        [String]
+        $ResourceGroupName
+    )
+
+    $CompletedParams = Write-StartingMessage -String $Name
+    $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
+
+    Try
+    {
+        $Null = Add-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName
+
+        $Runbook = Get-AzureRmAutomationRunbook -Name $Name `
+                                                -AutomationAccountName $AutomationAccountName `
+                                                -ResourceGroupName $ResourceGroupName
+    }
+    Catch
+    {
+        $Exception = $_
+        $ExceptionInfo = Get-ExceptionInfo -Exception $Exception
+        Switch ($Exception.FullyQualifiedErrorId)
+        {
+            'Microsoft.Azure.Commands.Automation.Common.ResourceCommonException,Microsoft.Azure.Commands.Automation.Cmdlet.GetAzureAutomationRunbook'
+            {
+                $Runbook = $False
+            }
+            Default
+            {
+                Throw
+            }
+        }
+    }
+
+    Write-CompletedMessage @CompletedParams
+    return $Runbook -as [bool]
+}
+Function Get-AzureAutomationRunbookInformation
+{
+    Param(
+        [Parameter(Mandatory = $True)]
+        [String] 
+        $FileName,
+
+        [Parameter(Mandatory = $True)]
+        [String]
+        $RepositoryName,
+
+        [Parameter(Mandatory = $True)]
+        [PSCredential]
+        $Credential,
+
+        [Parameter(Mandatory = $True)]
+        [String]
+        $AutomationAccountName,
+
+        [Parameter(Mandatory = $True)]
+        [String]
+        $SubscriptionName,
+
+        [Parameter(Mandatory = $True)]
+        [String]
+        $ResourceGroupName,
+
+        [Parameter(Mandatory = $False)]
+        [String]
+        $CurrentCommit = '-1'
+    )
+
+    $CompletedParams = Write-StartingMessage -String $FileName
+    $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
+
+    Try
+    {
+        $Null = Add-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName
+        
+        if(Test-FileIsWorkflow -FilePath $FilePath)
+        {
+            $Name = Get-WorkflowNameFromFile -FilePath $FilePath
+            $Type = 'PowerShellWorkflow'
+        }
+        else
+        {
+            $Name = Get-ScriptNameFromFileName -FilePath $FilePath
+            $Type = 'PowerShell'
+        }
+
+        if(Test-AzureAutomationRunbookExist -Name $Name `
+                                            -Credential $Credential `
+                                            -AutomationAccountName $AutomationAccountName `
+                                            -SubscriptionName $SubscriptionName `
+                                            -ResourceGroupName $ResourceGroupName)
+        {
+            $Runbook = Get-AzureRmAutomationRunbook -Name $Name `
+                                                    -ResourceGroupName $ResourceGroupName `
+                                                    -AutomationAccountName $AutomationAccountName
+            $Tags = $Runbook.Tags
+            $Tags.CurrentCommit = $CurrentCommit
+            $Description = $Runbook.Description
+        }
+        else
+        {
+            $Tags = @{ 
+                'RepositoryName' = $RepositoryName
+                'CurrentCommit' = $CurrentCommit
+            }
+            
+            $NewVersion = $True
+            $Description = [string]::Empty
+        }
+    }
+    Catch
+    {
+        $Exception = $_
+        $ExceptionInfo = Get-ExceptionInfo -Exception $Exception
+        Switch ($Exception.FullyQualifiedErrorId)
+        {
+            Default
+            {
+                Throw
+            }
+        }
+    }
+
+    Write-CompletedMessage @CompletedParams
+    Return @{ 
+        'Name' = $Name
+        'Type' = $Type
+        'Tags' = $Tags
+        'AutomationAccountName' = $AutomationAccountName
+        'ResourceGroupName' = $ResourceGroupName
+        'Path' = $FilePath
+        'Description' = $Description
+        'Force' = $True
+    }
 }
 Export-ModuleMember -Function * -Verbose:$false
