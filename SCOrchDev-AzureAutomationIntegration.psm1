@@ -644,7 +644,7 @@ Function Sync-GitRepositoryToAzureAutomation
             $RepositoryChange = Find-GitRepositoryChange -Path $_RepositoryInformation.Path `
                                                          -StartCommit $_RepositoryInformation.CurrentCommit
             
-            if($RepositoryChange.CurrentCommit -as [string] -ne $_RepositoryInformation.CurrentCommit -as [string])
+            if(-not ($RepositoryChange.CurrentCommit -as [string]).Equals($_RepositoryInformation.CurrentCommit -as [string]))
             {
                 Write-Verbose -Message "Processing [$($_RepositoryInformation.CurrentCommit)..$($RepositoryChange.CurrentCommit)]"
                 Write-Verbose -Message "RepositoryChange [$($RepositoryChange | ConvertTo-Json)]"
