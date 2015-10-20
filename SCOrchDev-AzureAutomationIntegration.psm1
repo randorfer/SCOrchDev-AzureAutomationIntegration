@@ -463,15 +463,20 @@ Function Remove-AzureAutomationOrphanRunbook
     {
         $Null = Add-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName
 
-        $AzureAutomationRunbooks = Get-AzureRmAutomationRunbook -AutomationAccountName $AutomationAccountName `
+        $AzureAutomationRunbook = Get-AzureRmAutomationRunbook -AutomationAccountName $AutomationAccountName `
                                                                 -ResourceGroupName $ResourceGroupName
-        if($AzureAutomationRunbooks) 
+        $AzureAutomationRunbook = $AzureAutomationRunbooks | ForEach-Object { 
+            Get-AzureRmAutomationRunbook -Name $_.Name `
+                                         -AutomationAccountName $_.AutomationAccountName `
+                                         -ResourceGroupName $_.ResourceGroupName 
+        }
+        if($AzureAutomationRunbook) 
         {
-            $AzureAutomationRunbooks = Group-RunbooksByRepository -InputObject $AzureAutomationRunbooks 
+            $AzureAutomationRunbook = Group-RunbooksByRepository -InputObject $AzureAutomationRunbook 
         }
 
         $RepositoryWorkflows = Get-GitRepositoryRunbookName -Path "$($RepositoryInformation.Path)\$($RepositoryInformation.RunbookFolder)"
-        $Differences = Compare-Object -ReferenceObject $AzureAutomationRunbooks.$RepositoryName.Name `
+        $Differences = Compare-Object -ReferenceObject $AzureAutomationRunbook.$RepositoryName.Name `
                                       -DifferenceObject $RepositoryWorkflows
     
         Foreach($Difference in $Differences)
