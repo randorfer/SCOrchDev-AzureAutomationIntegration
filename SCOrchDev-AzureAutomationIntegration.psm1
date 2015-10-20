@@ -630,7 +630,6 @@ Function Sync-GitRepositoryToAzureAutomation
         {
             $_RepositoryInformation = $RepositoryInformation.$RepositoryName
             $RunbookWorker = Get-AzureAutomationHybridRunbookWorker -Name $_RepositoryInformation.HybridWorkerGroup
-            <#       
             # Update the repository on all Workers
             Invoke-Command -ComputerName $RunbookWorker -Credential $RunbookWorkerAccessCredenial -ScriptBlock {
                 $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
@@ -638,9 +637,8 @@ Function Sync-GitRepositoryToAzureAutomation
                 $_RepositoryInformation = $Using:_RepositoryInformation#>
                 Update-GitRepository -RepositoryPath $_RepositoryInformation.RepositoryPath `
                                      -Path $_RepositoryInformation.Path `
-                                     -Branch $_RepositoryInformation.Branch<#
-            }
-            #>
+                                     -Branch $_RepositoryInformation.Branch
+           }
             $RepositoryChange = Find-GitRepositoryChange -Path $_RepositoryInformation.Path `
                                                          -StartCommit $_RepositoryInformation.CurrentCommit
             
@@ -699,7 +697,7 @@ Function Sync-GitRepositoryToAzureAutomation
                     {
                         Write-Verbose -Message 'Validating Module Path on Runbook Wokers'
                         $RepositoryModulePath = "$($_RepositoryInformation.Path)\$($_RepositoryInformation.PowerShellModuleFolder)"
-                        <#Invoke-Command -ComputerName $RunbookWorker -Credential $RunbookWorkerAccessCredenial -ScriptBlock {
+                        Invoke-Command -ComputerName $RunbookWorker -Credential $RunbookWorkerAccessCredenial -ScriptBlock {
                             $RepositoryModulePath = $Using:RepositoryModulePath#>
                             Try
                             {
@@ -716,7 +714,7 @@ Function Sync-GitRepositoryToAzureAutomation
                                 }
                                 Write-Warning -Message $Exception -WarningAction Continue
                             }
-                        #}
+                        }
                         Write-Verbose -Message 'Finished Validating Module Path on Runbook Wokers'
                     }
                     Catch
