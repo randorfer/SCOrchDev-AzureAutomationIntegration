@@ -60,8 +60,13 @@ Function Publish-AzureAutomationRunbookChange
                                                                     -CurrentCommit $CurrentCommit
         if($RunbookInformation.Update)
         {
+            Write-Verbose -Message "Updating Runbook with information [$($RunbookInformation | ConvertTo-Json)]"
             $ParameterSet = $RunbookInformation.ParameterSet
             $Null = Import-AzureRmAutomationRunbook @ParameterSet
+        }
+        else
+        {
+            Write-Verbose -Message "Runbook is not a new version. Skipping. [$($RunbookInformation | ConvertTo-Json)]"
         }
     }
     Catch
