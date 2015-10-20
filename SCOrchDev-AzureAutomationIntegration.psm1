@@ -984,7 +984,7 @@ Function Get-AzureAutomationRunbookInformation
             $Tags = $Runbook.Tags
             if($Tags.ContainsKey('CurrentCommit')) { $RunbookCurrentCommit = $Tags.CurrentCommit }
             else { $RunbookCurrentCommit = -1 }
-            if($CurrentCommit -ne $CurrentCommit) { $Tags.CurrentCommit = $CurrentCommit ; $Update = $True }
+            if($RunbookCurrentCommit -ne $CurrentCommit) { $Tags.CurrentCommit = $CurrentCommit ; $Update = $True }
             else { $Update = $False }
             
             $Description = $Runbook.Description
