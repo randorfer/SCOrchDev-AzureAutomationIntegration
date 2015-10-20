@@ -465,7 +465,7 @@ Function Remove-AzureAutomationOrphanRunbook
 
         $AzureAutomationRunbook = Get-AzureRmAutomationRunbook -AutomationAccountName $AutomationAccountName `
                                                                 -ResourceGroupName $ResourceGroupName
-        $AzureAutomationRunbook = $AzureAutomationRunbooks | ForEach-Object { 
+        $AzureAutomationRunbook = $AzureAutomationRunbook | ForEach-Object { 
             Get-AzureRmAutomationRunbook -Name $_.Name `
                                          -AutomationAccountName $_.AutomationAccountName `
                                          -ResourceGroupName $_.ResourceGroupName 
