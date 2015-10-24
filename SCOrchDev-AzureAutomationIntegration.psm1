@@ -1169,7 +1169,7 @@ Function Connect-AzureRmAccount
 
     Try
     {
-        if(-not (Get-Module -Name AzureRM.profile)) { $Null = Import-Module -Name AzureRM.profile *>1 }
+        if(-not (Get-Module -Name AzureRM.profile)) { $Null = Import-Module -Name AzureRM.profile *>&1 }
         if(-not (Test-AzureRMConnection -Credential $Credential -SubscriptionName $SubscriptionName))
         {
             $Null = Add-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName
