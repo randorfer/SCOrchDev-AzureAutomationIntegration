@@ -49,7 +49,7 @@ Function Publish-AzureAutomationRunbookChange
 
     Try
     {
-        $Null = Add-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName
+        Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName
 
         $RunbookInformation = Get-AzureAutomationRunbookInformation -FileName $FilePath `
                                                                     -RepositoryName $RepositoryName `
@@ -135,7 +135,7 @@ Function Publish-AzureAutomationSettingsFileChange
 
     Try
     {
-        $Null = Add-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName
+        Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName
 
         $Variables = Get-GlobalFromFile -FilePath $FilePath -GlobalType Variables        
         foreach($VariableName in $Variables.Keys)
@@ -313,7 +313,7 @@ Function Remove-AzureAutomationOrphanAsset
     $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
     Try
     {
-        $Null = Add-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName
+        Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName      
 
         $AzureAutomationVariables = Get-AzureRmAutomationVariable -AutomationAccountName $AutomationAccountName `
                                                                   -ResourceGroupName $ResourceGroupName
@@ -461,7 +461,7 @@ Function Remove-AzureAutomationOrphanRunbook
     $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
     Try
     {
-        $Null = Add-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName
+        Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName
 
         $AzureAutomationRunbook = Get-AzureRmAutomationRunbook -AutomationAccountName $AutomationAccountName `
                                                                 -ResourceGroupName $ResourceGroupName
@@ -824,7 +824,7 @@ Function Test-AzureAutomationRunbookExist
 
     Try
     {
-        $Null = Add-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName
+        Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName
 
         $Runbook = Get-AzureRmAutomationRunbook -Name $Name `
                                                 -AutomationAccountName $AutomationAccountName `
@@ -884,7 +884,7 @@ Function Test-AzureAutomationGlobalExist
 
     Try
     {
-        $Null = Add-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName
+        Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName
 
         switch($Type)
         {
@@ -964,7 +964,7 @@ Function Get-AzureAutomationRunbookInformation
 
     Try
     {
-        $Null = Add-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName
+        Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName
         
         if(Test-FileIsWorkflow -FilePath $FilePath)
         {
@@ -1076,7 +1076,7 @@ Function Get-AzureAutomationGlobalInformation
 
     Try
     {
-        $Null = Add-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName
+        Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName
         
         if(Test-AzureAutomationGlobalExist -Name $Name `
                                            -Credential $Credential `
@@ -1151,5 +1151,82 @@ Function Get-AzureAutomationGlobalInformation
             'ResourceGroupName' = $ResourceGroupName
         }
     }
+}
+Function Connect-AzureRmAccount
+{
+    Param(
+        [Parameter(Mandatory = $True)]
+        [PSCredential]
+        $Credential,
+        
+        [Parameter(Mandatory = $True)]
+        [String]
+        $SubscriptionName
+    )
+
+    $CompletedParams = Write-StartingMessage
+    $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
+
+    Try
+    {
+        if(-not (Get-Module -Name AzureRM.profile)) { $Null = Import-Module -Name AzureRM.profile *>1 }
+        if(-not (Test-AzureRMConnection -Credential $Credential -SubscriptionName $SubscriptionName))
+        {
+            $Null = Add-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName
+        }
+    }
+    Catch
+    {
+        Throw
+    }
+    Write-CompletedMessage @CompletedParams
+}
+Function Test-AzureRMConnection
+{
+    Param(
+        [Parameter(Mandatory = $True)]
+        [PSCredential]
+        $Credential,
+        
+        [Parameter(Mandatory = $True)]
+        [String]
+        $SubscriptionName
+    )
+    $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
+    $CompletedParams = Write-StartingMessage
+    Try
+    {
+        $AzureContext = Get-AzureRmContext
+        if(
+            ($AzureContext.Account.Id -eq $Credential.UserName) -and
+            ($AzureContext.Subscription.SubscriptionName-eq $SubscriptionName)
+           )
+        {
+            $Connected = $True
+        }
+        else
+        {
+            $Connected = $False
+        }
+    }
+    Catch
+    {
+        $Exception = $_
+        $ExceptionInfo = Get-ExceptionInfo -Exception $Exception
+
+        Switch($ExceptionInfo.FullyQualifiedErrorId)
+        {
+            'InvalidOperation,Microsoft.Azure.Commands.Profile.GetAzureRMContextCommand'
+            {
+                $Connected = $False
+            }
+            Default
+            {
+                Throw
+            }
+        }
+    }
+    Write-CompletedMessage @CompletedParams -Status "[Connected [$Connected]]"
+    Return $Connected
 }
 Export-ModuleMember -Function * -Verbose:$false
