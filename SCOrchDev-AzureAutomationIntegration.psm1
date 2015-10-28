@@ -662,6 +662,25 @@ Function Sync-GitRepositoryToAzureAutomation
                                                           -GlobalsFolder $_RepositoryInformation.GlobalsFolder `
                                                           -PowerShellModuleFolder $_RepositoryInformation.PowerShellModuleFolder
             
+                if($ReturnInformation.CleanRunbooks)
+                {
+                    Remove-AzureAutomationOrphanRunbook -RepositoryName $RepositoryName `
+                                                        -SubscriptionName $SubscriptionName `
+                                                        -AutomationAccountName $AutomationAccountName `
+                                                        -Credential $SubscriptionAccessCredential `
+                                                        -RepositoryInformation $_RepositoryInformation `
+                                                        -ResourceGroupName $ResourceGroupName
+                }
+                if($ReturnInformation.CleanAssets)
+                {
+                    Remove-AzureAutomationOrphanAsset -RepositoryName $RepositoryName `
+                                                      -SubscriptionName $SubscriptionName `
+                                                      -AutomationAccountName $AutomationAccountName `
+                                                      -Credential $SubscriptionAccessCredential `
+                                                      -RepositoryInformation $_RepositoryInformation `
+                                                      -ResourceGroupName $ResourceGroupName
+                }
+                
                 Foreach($SettingsFilePath in $ReturnInformation.SettingsFiles)
                 {
                     Publish-AzureAutomationSettingsFileChange -FilePath $SettingsFilePath `
@@ -683,24 +702,6 @@ Function Sync-GitRepositoryToAzureAutomation
                                                          -ResourceGroupName $ResourceGroupName
                 }
             
-                if($ReturnInformation.CleanRunbooks)
-                {
-                    Remove-AzureAutomationOrphanRunbook -RepositoryName $RepositoryName `
-                                                        -SubscriptionName $SubscriptionName `
-                                                        -AutomationAccountName $AutomationAccountName `
-                                                        -Credential $SubscriptionAccessCredential `
-                                                        -RepositoryInformation $_RepositoryInformation `
-                                                        -ResourceGroupName $ResourceGroupName
-                }
-                if($ReturnInformation.CleanAssets)
-                {
-                    Remove-AzureAutomationOrphanAsset -RepositoryName $RepositoryName `
-                                                      -SubscriptionName $SubscriptionName `
-                                                      -AutomationAccountName $AutomationAccountName `
-                                                      -Credential $SubscriptionAccessCredential `
-                                                      -RepositoryInformation $_RepositoryInformation `
-                                                      -ResourceGroupName $ResourceGroupName
-                }
                 if($ReturnInformation.ModuleFiles)
                 {
                     Try
