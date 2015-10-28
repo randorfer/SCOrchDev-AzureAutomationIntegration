@@ -601,11 +601,18 @@ Function Get-AzureAutomationHybridRunbookWorker
 {
     Param(
         [Parameter(Mandatory = $False)]
-        [String[]]
-        $Name
+        [String]
+        $HybridWorkerGroup
     )
+    $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
+    $CompletedParams = Write-StartingMessage -String $HybridWorkerGroup
+    $Var = Get-BatchAutomationVariable -Name 'HybridRunbookWorker' `
+                                       -Prefix 'Global'
     
-    Return @($env:COMPUTERNAME) -as [array]
+    $HT = $Var.HybridRunbookWorker | ConvertFrom-JSON
+
+    Write-CompletedMessage @CompletedParams
+    Return $HT.$HybridWorkerGroup -as [string[]]
 }
 
 <#
@@ -649,7 +656,7 @@ Function Sync-GitRepositoryToAzureAutomation
         Try
         {
             $_RepositoryInformation = $RepositoryInformation.$RepositoryName
-            $RunbookWorker = Get-AzureAutomationHybridRunbookWorker -Name $_RepositoryInformation.HybridWorkerGroup
+            $RunbookWorker = Get-AzureAutomationHybridRunbookWorker -HybridWorkerGroup $_RepositoryInformation.HybridWorkerGroup
             # Update the repository on all Workers
             Invoke-Command -ComputerName $RunbookWorker -Credential $RunbookWorkerAccessCredenial -ScriptBlock {
                 $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
