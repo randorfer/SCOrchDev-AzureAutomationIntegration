@@ -1186,7 +1186,12 @@ Function Connect-AzureRmAccount
         if(-not (Get-Module -Name AzureRM.profile)) { $Null = Import-Module -Name AzureRM.profile *>&1 }
         if(-not (Test-AzureRMConnection -Credential $Credential -SubscriptionName $SubscriptionName))
         {
+            Write-Verbose -Message 'Establishing new connection'
             $Null = Add-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName
+        }
+        else
+        {
+            Write-Verbose -Message 'Using current connection'
         }
     }
     Catch

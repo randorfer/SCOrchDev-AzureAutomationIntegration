@@ -12,7 +12,7 @@
 RootModule = '.\SCOrchDev-AzureAutomationIntegration.psm1'
 
 # Version number of this module.
-ModuleVersion = '2.0.28'
+ModuleVersion = '2.0.29'
 
 # ID used to uniquely identify this module
 GUID = '1dafd04a-a2c2-4245-a2ba-69bfcd6bfe0a'
