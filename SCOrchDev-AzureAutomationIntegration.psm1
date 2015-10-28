@@ -60,9 +60,19 @@ Function Publish-AzureAutomationRunbookChange
                                                                     -CurrentCommit $CurrentCommit
         if($RunbookInformation.Update)
         {
-            Write-Verbose -Message "Updating Runbook with information [$($RunbookInformation | ConvertTo-Json)]"
+            $UpdateCompleteParams = Write-StartingMessage -CommandName 'Updating Runbook' -String "[$($RunbookInformation | ConvertTo-Json)]"
+            if($RunbookInformation.CurrentRunbookType -ne $RunbookInformation.ParameterSet.Type)
+            {
+                Write-Verbose -Message "Runbook type change from [$($RunbookInformation.CurrentRunbookType)] to [$($RunbookInformation.ParameterSet.Type)]"
+                Remove-AzureRmAutomationRunbook -Name $RunbookInformation.ParameterSet.Name `
+                                                -ResourceGroupName $RunbookInformation.ParameterSet.ResourceGroupName `
+                                                -AutomationAccountName $RunbookInformation.ParameterSet.AutomationAccountName `
+                                                -Force
+                Write-Verbose -Message 'Old runbook removed'
+            }
             $ParameterSet = $RunbookInformation.ParameterSet
             $Null = Import-AzureRmAutomationRunbook @ParameterSet
+            Write-CompletedMessage @UpdateCompleteParams
         }
         else
         {
@@ -994,6 +1004,7 @@ Function Get-AzureAutomationRunbookInformation
             else { $Update = $False }
             
             $Description = $Runbook.Description
+            $CurrentRunbookType = $Runbook.RunbookType
         }
         else
         {
@@ -1004,6 +1015,7 @@ Function Get-AzureAutomationRunbookInformation
             
             $Update = $True
             $Description = [string]::Empty
+            $CurrentRunbookType = $Type
         }
     }
     Catch
@@ -1022,6 +1034,7 @@ Function Get-AzureAutomationRunbookInformation
     Write-CompletedMessage @CompletedParams
     Return @{ 
         'Update' = $Update
+        'CurrentRunbookType' = $CurrentRunbookType
         'ParameterSet' = @{
             'Name' = $Name
             'Type' = $Type
