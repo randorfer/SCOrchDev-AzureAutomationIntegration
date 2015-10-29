@@ -793,7 +793,8 @@ Function Sync-GitRepositoryToAzureAutomation
                                                           -Path $_RepositoryInformation.Path `
                                                           -RunbookFolder $_RepositoryInformation.RunbookFolder `
                                                           -GlobalsFolder $_RepositoryInformation.GlobalsFolder `
-                                                          -PowerShellModuleFolder $_RepositoryInformation.PowerShellModuleFolder
+                                                          -PowerShellModuleFolder $_RepositoryInformation.PowerShellModuleFolder `
+                                                          -DSCFolder $_RepositoryInformation.DSCFolder
             
                 if($ReturnInformation.CleanRunbooks)
                 {
