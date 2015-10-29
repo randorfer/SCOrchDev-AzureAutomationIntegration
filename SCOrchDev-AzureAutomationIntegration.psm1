@@ -1186,7 +1186,7 @@ Function Connect-AzureRmAccount
         $SubscriptionName
     )
 
-    $CompletedParams = Write-StartingMessage
+    $CompletedParams = Write-StartingMessage -String $SubscriptionName
     $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
 
     Try
