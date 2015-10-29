@@ -95,6 +95,64 @@ Function Publish-AzureAutomationRunbookChange
 
     Write-CompletedMessage @CompletedParams
 }
+Function Publish-AzureAutomationDSCChange
+{
+    Param(
+        [Parameter(Mandatory = $True)]
+        [String] 
+        $FilePath,
+        
+        [Parameter(Mandatory = $True)]
+        [String]
+        $CurrentCommit,
+
+        [Parameter(Mandatory = $True)]
+        [String]
+        $RepositoryName,
+
+        [Parameter(Mandatory = $True)]
+        [PSCredential]
+        $Credential,
+
+        [Parameter(Mandatory = $True)]
+        [String]
+        $AutomationAccountName,
+
+        [Parameter(Mandatory = $True)]
+        [String]
+        $SubscriptionName,
+
+        [Parameter(Mandatory = $True)]
+        [String]
+        $ResourceGroupName
+    )
+    $CompletedParams = Write-StartingMessage -String $FilePath
+    $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
+
+    Try
+    {
+        Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName
+
+        <#
+            do smart things
+        #>
+    }
+    Catch
+    {
+        $ErrorActionPreference = 'Stop'
+        $Exception = $_
+        $ExceptionInfo = Get-ExceptionInfo -Exception $Exception
+        Switch ($Exception.FullyQualifiedErrorId)
+        {
+            Default
+            {
+                Write-Exception -Stream Warning -Exception $_
+            }
+        }
+    }
+
+    Write-CompletedMessage @CompletedParams
+}
 <#
 .Synopsis
     Takes a json file and publishes all schedules and variables from it into Azure Automation
@@ -530,6 +588,64 @@ Function Remove-AzureAutomationOrphanRunbook
 }
 
 <#
+    .Synopsis
+        Checks an Azure Automation environment and removes any DSC tagged
+        with the current repository that are no longer found in
+        the repository
+
+    .Parameter RepositoryName
+        The name of the repository
+#>
+Function Remove-AzureAutomationOrphanDSC
+{
+    Param(
+        [Parameter(Mandatory = $True)]
+        [String]
+        $RepositoryName,
+
+        [Parameter(Mandatory = $True)]
+        [PSCredential]
+        $Credential,
+
+        [Parameter(Mandatory = $True)]
+        [String]
+        $AutomationAccountName,
+
+        [Parameter(Mandatory = $True)]
+        [String]
+        $ResourceGroupName,
+
+        [Parameter(Mandatory = $True)]
+        [String]
+        $SubscriptionName,
+
+        [Parameter(Mandatory = $True)]
+        [PSCustomObject] 
+        $RepositoryInformation
+    )
+
+    $CompletedParams = Write-StartingMessage
+    $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
+    Try
+    {
+        <#
+            Do smart things
+        #>
+    }
+    Catch
+    {
+        $Exception = New-Exception -Type 'RemoveAzureAutomationOrphanRunbookWorkflowFailure' `
+                                   -Message 'Unexpected error encountered in the Remove-AzureAutomationOrphanRunbook workflow' `
+                                   -Property @{
+            'ErrorMessage' = (Convert-ExceptionToString -Exception $_) ;
+            'RepositoryName' = $RepositoryName ;
+        }
+        Write-Exception -Exception $Exception -Stream Warning
+    }
+    Write-CompletedMessage @CompletedParams
+}
+
+<#
     .SYNOPSIS
     Returns $true if working in a local development environment, $false otherwise.
 #>
@@ -697,6 +813,15 @@ Function Sync-GitRepositoryToAzureAutomation
                                                       -RepositoryInformation $_RepositoryInformation `
                                                       -ResourceGroupName $ResourceGroupName
                 }
+                if($ReturnInformation.CleanDSC)
+                {
+                    Remove-AzureAutomationOrphanDSC -RepositoryName $RepositoryName `
+                                                    -SubscriptionName $SubscriptionName `
+                                                    -AutomationAccountName $AutomationAccountName `
+                                                    -Credential $SubscriptionAccessCredential `
+                                                    -RepositoryInformation $_RepositoryInformation `
+                                                    -ResourceGroupName $ResourceGroupName
+                }
                 
                 Foreach($SettingsFilePath in $ReturnInformation.SettingsFiles)
                 {
@@ -717,6 +842,16 @@ Function Sync-GitRepositoryToAzureAutomation
                                                          -AutomationAccountName $AutomationAccountName `
                                                          -SubscriptionName $SubscriptionName `
                                                          -ResourceGroupName $ResourceGroupName
+                }
+                Foreach($DSCFilePath in $ReturnInformation.DSCFiles)
+                {
+                    Publish-AzureAutomationDSCChange -FilePath $DSCFilePath `
+                                                     -CurrentCommit $RepositoryChange.CurrentCommit `
+                                                     -RepositoryName $RepositoryName `
+                                                     -Credential $SubscriptionAccessCredential `
+                                                     -AutomationAccountName $AutomationAccountName `
+                                                     -SubscriptionName $SubscriptionName `
+                                                     -ResourceGroupName $ResourceGroupName
                 }
             
                 if($ReturnInformation.ModuleFiles)
