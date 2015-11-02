@@ -795,7 +795,7 @@ Function Sync-GitRepositoryToAzureAutomation
                                                           -GlobalsFolder $_RepositoryInformation.GlobalsFolder `
                                                           -PowerShellModuleFolder $_RepositoryInformation.PowerShellModuleFolder `
                                                           -DSCFolder $_RepositoryInformation.DSCFolder
-            
+
                 if($ReturnInformation.CleanRunbooks)
                 {
                     Remove-AzureAutomationOrphanRunbook -RepositoryName $RepositoryName `
@@ -843,6 +843,8 @@ Function Sync-GitRepositoryToAzureAutomation
                                                          -AutomationAccountName $AutomationAccountName `
                                                          -SubscriptionName $SubscriptionName `
                                                          -ResourceGroupName $ResourceGroupName
+
+                    $IntegrationTestResult = Invoke-IntegrationTest -Path $RunbookFilePath
                 }
                 Foreach($DSCFilePath in $ReturnInformation.DSCFiles)
                 {
@@ -918,7 +920,7 @@ Function Invoke-IntegrationTest
         $Path
     )
     $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
-    $CompletedParams = Write-StartingMessage
+    $CompletedParams = Write-StartingMessage -String $Path
     $Result = @{ 'Pester' = $null ; 'PSScriptAnalyzer'  = $null }
     Try
     {
@@ -933,7 +935,7 @@ Function Invoke-IntegrationTest
             $ChildItem = Get-ChildItem -Path $Path -Recurse -Include *.ps1,*.psm1 -Exclude *.tests.ps1
             $ChildItem | ForEach-Object {
                 $AnalyzerResult = Invoke-ScriptAnalyzer -Path $_.FullName
-                $Null = $Result.PSScriptAnalyzer.Add(@{'FileName' = $_.FullName ; 'AnalyzerResult' = Select-FirstValid($AnalyzerResult,'Passing') })
+                $Null = $Result.PSScriptAnalyzer.Add(@{'FileName' = $_.FullName ; 'AnalyzerResult' = Select-FirstValid -Value ($AnalyzerResult,'Passing') })
             }
         }
     }
@@ -942,7 +944,7 @@ Function Invoke-IntegrationTest
         Write-Exception -Exception $_ -Stream Warning
     }
 
-    Write-CompletedMessage @CompletedParams
+    Write-CompletedMessage @CompletedParams -Status ($Result | ConvertTo-Json -Depth ([int]::MaxValue))
     Return $Result
 }
 <#
