@@ -933,7 +933,7 @@ Function Invoke-IntegrationTest
             $ChildItem = Get-ChildItem -Path $Path -Recurse -Include *.ps1,*.psm1 -Exclude *.tests.ps1
             $ChildItem | ForEach-Object {
                 $AnalyzerResult = Invoke-ScriptAnalyzer -Path $_.FullName
-                $Null = $Result.PSScriptAnalyzer.Add(@{'FileName' = $_.FullName ; 'AnalyzerResult' = $AnalyzerResult })
+                $Null = $Result.PSScriptAnalyzer.Add(@{'FileName' = $_.FullName ; 'AnalyzerResult' = Select-FirstValid($AnalyzerResult,'Passing') })
             }
         }
     }
