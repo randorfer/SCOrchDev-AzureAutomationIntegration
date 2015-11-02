@@ -843,8 +843,6 @@ Function Sync-GitRepositoryToAzureAutomation
                                                          -AutomationAccountName $AutomationAccountName `
                                                          -SubscriptionName $SubscriptionName `
                                                          -ResourceGroupName $ResourceGroupName
-
-                    $IntegrationTestResult = Invoke-IntegrationTest -Path $RunbookFilePath
                 }
                 Foreach($DSCFilePath in $ReturnInformation.DSCFiles)
                 {
@@ -891,6 +889,11 @@ Function Sync-GitRepositoryToAzureAutomation
                 $UpdatedRepositoryInformation = (Update-RepositoryInformationCommitVersion -RepositoryInformationJSON $RepositoryInformationJSON `
                                                                                            -RepositoryName $RepositoryName `
                                                                                            -Commit $RepositoryChange.CurrentCommit) -as [string]
+                <# Do things
+                if($RunIntegrationTests)
+                {
+                }
+                #>
                 Write-Verbose -Message "Finished Processing [$($_RepositoryInformation.CurrentCommit)..$($RepositoryChange.CurrentCommit)]"
             }
         }
