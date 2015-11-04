@@ -1397,4 +1397,125 @@ Function Test-AzureRMConnection
     Write-CompletedMessage @CompletedParams -Status "[Connected [$Connected]]"
     Return $Connected
 }
+
+<#
+#>
+Function Set-AzureAutomationTag
+{
+    Param(
+        [Parameter(
+            Mandatory = $True,
+            ValueFromPipeLine = $True,
+            Position = 0
+        )]
+        [ValidateSet(
+            'Runbook',
+            'Variable',
+            'Schedule'
+        )]
+        [string]
+        $Type,
+
+        [Parameter(
+            Mandatory = $True,
+            ValueFromPipeLine = $True,
+            Position = 1
+        )]
+        [string]
+        $Name,
+
+        [Parameter(
+            Mandatory = $True,
+            ValueFromPipeLine = $True,
+            Position = 2
+        )]
+        [string]
+        $TagName,
+
+        [Parameter(
+            Mandatory = $True,
+            ValueFromPipeLine = $True,
+            Position = 3
+        )]
+        [string]
+        $Value,
+
+        [Parameter(Mandatory = $True)]
+        [PSCredential]
+        $Credential,
+        
+        [Parameter(Mandatory = $True)]
+        [String]
+        $SubscriptionName,
+
+        [Parameter(Mandatory = $True)]
+        [String]
+        $AutomationAccountName,
+
+        [Parameter(Mandatory = $True)]
+        [String]
+        $ResourceGroupName
+    )
+    $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
+    $CompletedParams = Write-StartingMessage
+
+    Try
+    {
+        Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName
+
+        $CommonParameters = @{
+            'ResourceGroupName' = 'ResourceGroupName'
+            'AutomationAccountName' = $AutomationAccountName
+        }
+
+        Switch($Type)
+        {
+            'Runbook'
+            {
+                $Runbook = Get-AzureRmAutomationRunbook -Name $Name @CommonParameters
+                $Tags = $Runbook.Tags
+                if($Tags.ContainsKey($TagName))
+                {
+                    $Tags.$TagName = $Value
+                }
+                else
+                {
+                    $Null = $Tags += @{ $TagName = $Value }
+                }
+                $Null = Set-AzureRmAutomationRunbook -Name $Name -Tags $Tags @CommonParameters
+            }
+            'Variable'
+            {
+                $Description = "$($Variable.Description)`n`r__RepositoryName:$($RepositoryName);CurrentCommit:$($CurrentCommit);__"
+            }
+            'Schedule'
+            {
+            }
+        }
+    }
+    Catch
+    {
+        $Exception = $_
+        $ExceptionInfo = Get-ExceptionInfo -Exception $Exception
+        Switch($ExceptionInfo.FullyQualifiedErrorId)
+        {
+            Default
+            {
+                Throw
+            }
+        }
+    }
+    
+    Write-CompletedMessage @CompletedParams
+}
+
+Function ConvertFrom-AutomationDescriptionTagLine
+{
+    
+}
+
+Function ConvertFrom-AutomationDescriptionTagLine
+{
+    
+}
 Export-ModuleMember -Function * -Verbose:$false
