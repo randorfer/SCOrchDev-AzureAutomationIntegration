@@ -820,7 +820,7 @@ Function Sync-IndividualGitRepositoryToAzureAutomation
         $ResourceGroupName
     )
     
-    $CompletedParams = Write-StartingMessage -String (ConvertTo-Json -InputObject $RepositoryInformation)
+    $CompletedParams = Write-StartingMessage -String "[$RepositoryName] $(ConvertTo-Json -InputObject $RepositoryInformation)"
     $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
 
     Try
