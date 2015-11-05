@@ -1200,6 +1200,9 @@ Function Get-AzureAutomationRunbookInformation
             
             $Description = $Runbook.Description
             $CurrentRunbookType = $Runbook.RunbookType
+
+            # Currently the API calls PowerShellWorkflow Script ...
+            if($CurrentRunbookType -eq 'Script') { $CurrentRunbookType = 'PowerShellWorkflow' }
         }
         else
         {
