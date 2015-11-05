@@ -769,144 +769,191 @@ Function Sync-GitRepositoryToAzureAutomation
     $RepositoryInformation = $RepositoryInformationJSON | ConvertFrom-Json | ConvertFrom-PSCustomObject
     Foreach($RepositoryName in $RepositoryInformation.Keys -as [array])
     {
-        Try
-        {
-            $_RepositoryInformation = $RepositoryInformation.$RepositoryName
-            $RunbookWorker = Get-AzureAutomationHybridRunbookWorker -HybridWorkerGroup $_RepositoryInformation.HybridWorkerGroup
-            # Update the repository on all Workers
-            Invoke-Command -ComputerName $RunbookWorker -Credential $RunbookWorkerAccessCredenial -ScriptBlock {
-                $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
-                    
-                $_RepositoryInformation = $Using:_RepositoryInformation#>
-                Update-GitRepository -RepositoryPath $_RepositoryInformation.RepositoryPath `
-                                     -Path $_RepositoryInformation.Path `
-                                     -Branch $_RepositoryInformation.Branch
-           }
-            $RepositoryChange = Find-GitRepositoryChange -Path $_RepositoryInformation.Path `
-                                                         -StartCommit $_RepositoryInformation.CurrentCommit
-            
-            if(-not ($RepositoryChange.CurrentCommit -as [string]).Equals($_RepositoryInformation.CurrentCommit -as [string]))
-            {
-                Write-Verbose -Message "Processing [$($_RepositoryInformation.CurrentCommit)..$($RepositoryChange.CurrentCommit)]"
-                Write-Verbose -Message "RepositoryChange [$($RepositoryChange | ConvertTo-Json)]"
-                $ReturnInformation = Group-RepositoryFile -File $RepositoryChange.Files `
-                                                          -Path $_RepositoryInformation.Path `
-                                                          -RunbookFolder $_RepositoryInformation.RunbookFolder `
-                                                          -GlobalsFolder $_RepositoryInformation.GlobalsFolder `
-                                                          -PowerShellModuleFolder $_RepositoryInformation.PowerShellModuleFolder `
-                                                          -DSCFolder $_RepositoryInformation.DSCFolder
-
-                if($ReturnInformation.CleanRunbooks)
-                {
-                    Remove-AzureAutomationOrphanRunbook -RepositoryName $RepositoryName `
-                                                        -SubscriptionName $SubscriptionName `
-                                                        -AutomationAccountName $AutomationAccountName `
-                                                        -Credential $SubscriptionAccessCredential `
-                                                        -RepositoryInformation $_RepositoryInformation `
-                                                        -ResourceGroupName $ResourceGroupName
-                }
-                if($ReturnInformation.CleanAssets)
-                {
-                    Remove-AzureAutomationOrphanAsset -RepositoryName $RepositoryName `
-                                                      -SubscriptionName $SubscriptionName `
-                                                      -AutomationAccountName $AutomationAccountName `
-                                                      -Credential $SubscriptionAccessCredential `
-                                                      -RepositoryInformation $_RepositoryInformation `
-                                                      -ResourceGroupName $ResourceGroupName
-                }
-                if($ReturnInformation.CleanDSC)
-                {
-                    Remove-AzureAutomationOrphanDSC -RepositoryName $RepositoryName `
-                                                    -SubscriptionName $SubscriptionName `
-                                                    -AutomationAccountName $AutomationAccountName `
-                                                    -Credential $SubscriptionAccessCredential `
-                                                    -RepositoryInformation $_RepositoryInformation `
-                                                    -ResourceGroupName $ResourceGroupName
-                }
-                
-                Foreach($SettingsFilePath in $ReturnInformation.SettingsFiles)
-                {
-                    Publish-AzureAutomationSettingsFileChange -FilePath $SettingsFilePath `
-                                                              -CurrentCommit $RepositoryChange.CurrentCommit `
-                                                              -RepositoryName $RepositoryName `
-                                                              -Credential $SubscriptionAccessCredential `
-                                                              -AutomationAccountName $AutomationAccountName `
-                                                              -SubscriptionName $SubscriptionName `
-                                                              -ResourceGroupName $ResourceGroupName
-                }
-                Foreach($RunbookFilePath in $ReturnInformation.ScriptFiles)
-                {
-                    Publish-AzureAutomationRunbookChange -FilePath $RunbookFilePath `
-                                                         -CurrentCommit $RepositoryChange.CurrentCommit `
-                                                         -RepositoryName $RepositoryName `
-                                                         -Credential $SubscriptionAccessCredential `
-                                                         -AutomationAccountName $AutomationAccountName `
-                                                         -SubscriptionName $SubscriptionName `
-                                                         -ResourceGroupName $ResourceGroupName
-                }
-                Foreach($DSCFilePath in $ReturnInformation.DSCFiles)
-                {
-                    Publish-AzureAutomationDSCChange -FilePath $DSCFilePath `
-                                                     -CurrentCommit $RepositoryChange.CurrentCommit `
-                                                     -RepositoryName $RepositoryName `
-                                                     -Credential $SubscriptionAccessCredential `
-                                                     -AutomationAccountName $AutomationAccountName `
-                                                     -SubscriptionName $SubscriptionName `
-                                                     -ResourceGroupName $ResourceGroupName
-                }
-            
-                if($ReturnInformation.ModuleFiles)
-                {
-                    Try
-                    {
-                        Write-Verbose -Message 'Validating Module Path on Runbook Wokers'
-                        $RepositoryModulePath = "$($_RepositoryInformation.Path)\$($_RepositoryInformation.PowerShellModuleFolder)"
-                        Invoke-Command -ComputerName $RunbookWorker -Credential $RunbookWorkerAccessCredenial -ScriptBlock {
-                            $RepositoryModulePath = $Using:RepositoryModulePath#>
-                            Try
-                            {
-                                Add-PSEnvironmentPathLocation -Path $RepositoryModulePath -Location Machine
-                            }
-                            Catch
-                            {
-                                $Exception = New-Exception -Type 'PowerShellModulePathValidationError' `
-                                                   -Message 'Failed to set PSModulePath' `
-                                                   -Property @{
-                                    'ErrorMessage' = (Convert-ExceptionToString -String $_) ;
-                                    'RepositoryModulePath' = $RepositoryModulePath ;
-                                    'RunbookWorker' = $env:COMPUTERNAME ;
-                                }
-                                Write-Warning -Message $Exception -WarningAction Continue
-                            }
-                        }
-                        Write-Verbose -Message 'Finished Validating Module Path on Runbook Wokers'
-                    }
-                    Catch
-                    {
-                        Write-Exception -Exception $_ -Stream Warning
-                    }
-                }
-                $UpdatedRepositoryInformation = (Update-RepositoryInformationCommitVersion -RepositoryInformationJSON $RepositoryInformationJSON `
-                                                                                           -RepositoryName $RepositoryName `
-                                                                                           -Commit $RepositoryChange.CurrentCommit) -as [string]
-                <# Do things
-                if($RunIntegrationTests)
-                {
-                }
-                #>
-                Write-Verbose -Message "Finished Processing [$($_RepositoryInformation.CurrentCommit)..$($RepositoryChange.CurrentCommit)]"
-            }
-        }
-        Catch
-        {
-            Write-Exception -Stream Warning -Exception $_
-        }
+        $_RepositoryInformation = $RepositoryInformation.$RepositoryName
+        $RepositoryInformationJSON = Sync-IndividualGitRepositoryToAzureAutomation -RepositoryInformation $_RepositoryInformation `
+                                                                                   -RepositoryName $RepositoryName `
+                                                                                   -RepositoryInformationJSON $RepositoryInformationJSON `
+                                                                                   -SubscriptionAccessCredential $SubscriptionAccessCredential `
+                                                                                   -RunbookWorkerAccessCredenial $RunbookWorkerAccessCredenial `
+                                                                                   -AutomationAccountName $AutomationAccountName `
+                                                                                   -SubscriptionName $SubscriptionName `
+                                                                                   -ResourceGroupName $ResourceGroupName `
     }
 
     Write-CompletedMessage @CompletedParams
     Return (Select-FirstValid -Value @($UpdatedRepositoryInformation, $RepositoryInformationJSON))
 }
+<#
+#>
+Function Sync-IndividualGitRepositoryToAzureAutomation
+{
+    Param(
+        [Parameter(Mandatory = $True)]
+        [pscredential]
+        $SubscriptionAccessCredential,
 
+        [Parameter(Mandatory = $True)]
+        [pscredential]
+        $RunbookWorkerAccessCredenial,
+        
+        [Parameter(Mandatory = $True)]
+        $RepositoryInformation,
+
+        [Parameter(Mandatory = $True)]
+        [string]
+        $RepositoryInformationJSON,
+
+        [Parameter(Mandatory = $True)]
+        [string]
+        $RepositoryName,
+
+        [Parameter(Mandatory = $True)]
+        [string]
+        $AutomationAccountName,
+        
+        [Parameter(Mandatory = $True)]
+        [string]
+        $SubscriptionName,
+
+        [Parameter(Mandatory = $True)]
+        [string]
+        $ResourceGroupName
+    )
+    
+    $CompletedParams = Write-StartingMessage -String (ConvertTo-Json -InputObject $RepositoryInformation)
+    $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
+
+    Try
+    {
+        $RunbookWorker = Get-AzureAutomationHybridRunbookWorker -HybridWorkerGroup $RepositoryInformation.HybridWorkerGroup
+        # Update the repository on all Workers
+        Invoke-Command -ComputerName $RunbookWorker -Credential $RunbookWorkerAccessCredenial -ScriptBlock {
+            $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
+                    
+            $RepositoryInformation = $Using:RepositoryInformation
+            Update-GitRepository -RepositoryPath $RepositoryInformation.RepositoryPath `
+                                    -Path $RepositoryInformation.Path `
+                                    -Branch $RepositoryInformation.Branch
+        }
+        $RepositoryChange = Find-GitRepositoryChange -Path $RepositoryInformation.Path `
+                                                        -StartCommit $RepositoryInformation.CurrentCommit
+            
+        if(-not ($RepositoryChange.CurrentCommit -as [string]).Equals($RepositoryInformation.CurrentCommit -as [string]))
+        {
+            Write-Verbose -Message "Processing [$($RepositoryInformation.CurrentCommit)..$($RepositoryChange.CurrentCommit)]"
+            Write-Verbose -Message "RepositoryChange [$($RepositoryChange | ConvertTo-Json)]"
+            $ReturnInformation = Group-RepositoryFile -File $RepositoryChange.Files `
+                                                        -Path $_RepositoryInformation.Path `
+                                                        -RunbookFolder $RepositoryInformation.RunbookFolder `
+                                                        -GlobalsFolder $RepositoryInformation.GlobalsFolder `
+                                                        -PowerShellModuleFolder $RepositoryInformation.PowerShellModuleFolder `
+                                                        -DSCFolder $RepositoryInformation.DSCFolder
+
+            if($ReturnInformation.CleanRunbooks)
+            {
+                Remove-AzureAutomationOrphanRunbook -RepositoryName $RepositoryName `
+                                                    -SubscriptionName $SubscriptionName `
+                                                    -AutomationAccountName $AutomationAccountName `
+                                                    -Credential $SubscriptionAccessCredential `
+                                                    -RepositoryInformation $RepositoryInformation `
+                                                    -ResourceGroupName $ResourceGroupName
+            }
+            if($ReturnInformation.CleanAssets)
+            {
+                Remove-AzureAutomationOrphanAsset -RepositoryName $RepositoryName `
+                                                    -SubscriptionName $SubscriptionName `
+                                                    -AutomationAccountName $AutomationAccountName `
+                                                    -Credential $SubscriptionAccessCredential `
+                                                    -RepositoryInformation $RepositoryInformation `
+                                                    -ResourceGroupName $ResourceGroupName
+            }
+            if($ReturnInformation.CleanDSC)
+            {
+                Remove-AzureAutomationOrphanDSC -RepositoryName $RepositoryName `
+                                                -SubscriptionName $SubscriptionName `
+                                                -AutomationAccountName $AutomationAccountName `
+                                                -Credential $SubscriptionAccessCredential `
+                                                -RepositoryInformation $RepositoryInformation `
+                                                -ResourceGroupName $ResourceGroupName
+            }
+                
+            Foreach($SettingsFilePath in $ReturnInformation.SettingsFiles)
+            {
+                Publish-AzureAutomationSettingsFileChange -FilePath $SettingsFilePath `
+                                                            -CurrentCommit $RepositoryChange.CurrentCommit `
+                                                            -RepositoryName $RepositoryName `
+                                                            -Credential $SubscriptionAccessCredential `
+                                                            -AutomationAccountName $AutomationAccountName `
+                                                            -SubscriptionName $SubscriptionName `
+                                                            -ResourceGroupName $ResourceGroupName
+            }
+            Foreach($RunbookFilePath in $ReturnInformation.ScriptFiles)
+            {
+                Publish-AzureAutomationRunbookChange -FilePath $RunbookFilePath `
+                                                        -CurrentCommit $RepositoryChange.CurrentCommit `
+                                                        -RepositoryName $RepositoryName `
+                                                        -Credential $SubscriptionAccessCredential `
+                                                        -AutomationAccountName $AutomationAccountName `
+                                                        -SubscriptionName $SubscriptionName `
+                                                        -ResourceGroupName $ResourceGroupName
+            }
+            Foreach($DSCFilePath in $ReturnInformation.DSCFiles)
+            {
+                Publish-AzureAutomationDSCChange -FilePath $DSCFilePath `
+                                                    -CurrentCommit $RepositoryChange.CurrentCommit `
+                                                    -RepositoryName $RepositoryName `
+                                                    -Credential $SubscriptionAccessCredential `
+                                                    -AutomationAccountName $AutomationAccountName `
+                                                    -SubscriptionName $SubscriptionName `
+                                                    -ResourceGroupName $ResourceGroupName
+            }
+            
+            if($ReturnInformation.ModuleFiles)
+            {
+                Try
+                {
+                    Write-Verbose -Message 'Validating Module Path on Runbook Wokers'
+                    $RepositoryModulePath = "$($RepositoryInformation.Path)\$($RepositoryInformation.PowerShellModuleFolder)"
+                    Invoke-Command -ComputerName $RunbookWorker -Credential $RunbookWorkerAccessCredenial -ScriptBlock {
+                        $RepositoryModulePath = $Using:RepositoryModulePath
+                        Try
+                        {
+                            Add-PSEnvironmentPathLocation -Path $RepositoryModulePath -Location Machine
+                        }
+                        Catch
+                        {
+                            $Exception = New-Exception -Type 'PowerShellModulePathValidationError' `
+                                                -Message 'Failed to set PSModulePath' `
+                                                -Property @{
+                                'ErrorMessage' = (Convert-ExceptionToString -String $_) ;
+                                'RepositoryModulePath' = $RepositoryModulePath ;
+                                'RunbookWorker' = $env:COMPUTERNAME ;
+                            }
+                            Write-Warning -Message $Exception -WarningAction Continue
+                        }
+                    }
+                    Write-Verbose -Message 'Finished Validating Module Path on Runbook Wokers'
+                }
+                Catch
+                {
+                    Write-Exception -Exception $_ -Stream Warning
+                }
+            }
+            $UpdatedRepositoryInformation = (Update-RepositoryInformationCommitVersion -RepositoryInformationJSON $RepositoryInformationJSON `
+                                                                                        -RepositoryName $RepositoryName `
+                                                                                        -Commit $RepositoryChange.CurrentCommit) -as [string]
+
+            Write-Verbose -Message "Finished Processing [$($_RepositoryInformation.CurrentCommit)..$($RepositoryChange.CurrentCommit)]"
+        }
+    }
+    Catch
+    {
+        Write-Exception -Stream Warning -Exception $_
+    }
+
+    Write-CompletedMessage @CompletedParams
+    Return (Select-FirstValid -Value @($UpdatedRepositoryInformation, $RepositoryInformationJSON))
+}
 <#
     .Synopsis
         Invokes test suites on the Runbooks and PowerShell modules
@@ -1511,10 +1558,43 @@ Function Set-AzureAutomationTag
 
 Function ConvertFrom-AutomationDescriptionTagLine
 {
+    Param(
+        [Parameter(
+            Mandatory = $True,
+            ValueFromPipeline = $True
+        )]
+        [string]
+        $InputObject
+    )
+
+    $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
+    $CompletedParams = Write-StartingMessage
+
+    Try
+    {
+        $KeyValueHT = @{}
+        $Pattern = '__([^:]+:[^;]+;)+__'
+        $Matches = $InputObject | Select-String -AllMatches $Pattern | 
+            Select-Object -ExpandProperty Matches | 
+            Select-Object -ExpandProperty Value
+        $Matches = $InputObject |
+            Select-String -AllMatches '__([^:]+:[^;]+;)+__' |
+            Select-Object -ExpandProperty Matches |
+            Select-Object -ExpandProperty Value
+
+        $Matches[1].Captures.Value | Foreach-Object { 
+            $Key, $Value = $_.Split(';:')
+            $Null = $KeyValueHT.Add($Key,$Value)
+        }
+    }
+    Catch
+    {
+    }
     
+    Write-CompletedMessage @CompletedParams
 }
 
-Function ConvertFrom-AutomationDescriptionTagLine
+Function ConvertTo-AutomationDescriptionTagLine
 {
     
 }
