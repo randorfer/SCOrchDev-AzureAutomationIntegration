@@ -979,6 +979,7 @@ Function Invoke-IntegrationTest
             $ChildItem = Get-ChildItem -Path $Path -Recurse -Include *.ps1,*.psm1 -Exclude *.tests.ps1
             $Result.Pester = Invoke-Pester $Path -CodeCoverage $ChildItem.FullName -Quiet -PassThru
         }
+        <#
         if((Get-Module -Name PSScriptAnalyzer -ListAvailable) -as [bool])
         {
             $Result.PSScriptAnalyzer = New-Object -TypeName System.Collections.ArrayList
@@ -987,7 +988,7 @@ Function Invoke-IntegrationTest
                 $AnalyzerResult = Invoke-ScriptAnalyzer -Path $_.FullName
                 $Null = $Result.PSScriptAnalyzer.Add(@{'FileName' = $_.FullName ; 'AnalyzerResult' = Select-FirstValid -Value ($AnalyzerResult,'Passing') })
             }
-        }
+        }#>
     }
     Catch
     {
