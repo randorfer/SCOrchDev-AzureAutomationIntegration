@@ -977,7 +977,10 @@ Function Invoke-IntegrationTest
         if((Get-Module -Name Pester -ListAvailable) -as [bool])
         {
             $ChildItem = Get-ChildItem -Path $Path -Recurse -Include *.ps1,*.psm1 -Exclude *.tests.ps1
-            $Result.Pester = Invoke-Pester $Path -CodeCoverage $ChildItem.FullName -Quiet -PassThru
+            if($ChildItem.FullName -like '*.ps1' -or $ChildItem.FullName -like '*.psm1')
+            {
+                $Result.Pester = Invoke-Pester $Path -CodeCoverage $ChildItem.FullName -Quiet -PassThru
+            }
         }
         <#
         if((Get-Module -Name PSScriptAnalyzer -ListAvailable) -as [bool])
