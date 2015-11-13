@@ -1,5 +1,6 @@
 ﻿#requires -Version 3 -Modules SCOrchDev-Exception, SCOrchDev-GitIntegration, SCOrchDev-Utility
-
+$NunitExe = "$PsScriptRoot\NUnitToHTML\NUnit2Report.Console.exe"
+$gitEXE = "$PsScriptRoot\PortableGit\Bin\git.exe"
 $RepositoryNameRegex = '__RepositoryName:([^;]+);'
 $CurrentCommitRegex = 'CurrentCommit:([^;]+);__'
 
@@ -970,21 +971,58 @@ Function Invoke-IntegrationTest
             Position = 0,
             ValueFromPipeline = $True
         )]
-        [string]
+        [string[]]
         $Path
     )
     $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
-    $CompletedParams = Write-StartingMessage -String $Path
-    $Result = @{ 'Pester' = $null ; 'PSScriptAnalyzer'  = $null }
+    $CompletedParams = Write-StartingMessage -String $($Path -join ';')
+    $Result = @{}
     Try
     {
         if((Get-Module -Name Pester -ListAvailable) -as [bool])
         {
-            $ChildItem = Get-ChildItem -Path $Path -Recurse -Include *.ps1,*.psm1 -Exclude *.tests.ps1
-            if($ChildItem.FullName -like '*.ps1' -or $ChildItem.FullName -like '*.psm1')
+            $TempDirectory = New-TempDirectory
+            Try
             {
-                $Result.Pester = Invoke-Pester $Path -CodeCoverage $ChildItem.FullName -Quiet -PassThru
+                Foreach($_Path in $Path)
+                {
+                    Write-Verbose -Message $_Path
+                    $Item = Get-Item -Path $_Path
+                    if(-not ($item.PSIsContainer))
+                    {
+                        $Item = $Item.Directory
+                    }
+                    $TestFiles = Get-ChildItem -Path $Item.FullName -Include *.tests.ps1 -Recurse
+                    
+                    if($TestFiles -as [bool])
+                    {
+                        $ReportPath = "$TempDirectory\$($Item.Name).xml"
+                        Invoke-Pester $Item.FullName -OutputFile $ReportPath -OutputFormat NUnitXml -Quiet
+                    }
+                }
+                $CurrentDirectory = $PWD
+                Try
+                {
+                    Set-Location -Path "$PsScriptRoot\NUnitToHTML"
+                    $XMLFiles = Get-ChildItem -Path $TempDirectory -Filter *.xml
+                    foreach($XMLFile in $XMLFiles)
+                    {
+                        $OutputFile = "$($TempDirectory.FullName)\$($XmlFile.Name)"
+                        Write-Verbose -Message "$NunitEXE --fileset='$($XMLFile.FullName)' -o $OutputFile"
+                        Invoke-Expression -Command "$NunitEXE --fileset='$($XMLFile.FullName)' -o $($TempDirectory.FullName)\$($XmlFile.Name)"
+                        $Null = $Result.Add($XmlFile.Name, ((Get-Content $OutputFile) -as [string]))
+                    }
+                }
+                Finally
+                {
+                    Set-Location $PWD
+                }
             }
+            Finally
+            {
+              Remove-Item -Path $TempDirectory -Force -Recurse
+            }
+            
         }
         <#
         if((Get-Module -Name PSScriptAnalyzer -ListAvailable) -as [bool])
@@ -1002,7 +1040,7 @@ Function Invoke-IntegrationTest
         Write-Exception -Exception $_ -Stream Warning
     }
 
-    Write-CompletedMessage @CompletedParams -Status ($Result | ConvertTo-Json -Depth ([int]::MaxValue))
+    Write-CompletedMessage @CompletedParams
     Return $Result
 }
 <#
@@ -1646,5 +1684,25 @@ Function ConvertTo-AutomationDescriptionTagLine
     
     Write-CompletedMessage @CompletedParams -Status $Description
     Return $Description
+}
+Function Convert-PesterJSONToHTMLTable
+{
+    Param(
+        [Parameter(
+            Mandatory = $True,
+            ValueFromPipeline = $True,
+            Position = 0
+        )]
+        [string]
+        $InputObject
+    )
+
+    $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
+    $CompletedParams = Write-StartingMessage -Stream Debug
+
+
+
+    Write-CompletedMessage @CompletedParams -Status $Description
+    Return $Table
 }
 Export-ModuleMember -Function * -Verbose:$false
