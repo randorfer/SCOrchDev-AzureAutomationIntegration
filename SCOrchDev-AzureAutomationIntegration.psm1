@@ -1220,7 +1220,7 @@ Function Get-AzureAutomationRunbookInformation
             }
             
             $Update = $True
-            $Description = [string]::Empty
+            $Description = Select-FirstValid $Runbook.Description,"$([string]::Empty)"
             $CurrentRunbookType = $Type
         }
     }
@@ -1458,7 +1458,7 @@ Function Test-AzureRMConnection
 
 <#
 #>
-Function Set-AzureAutomationTag
+Function Set-AzureAutomationIntegrationTag
 {
     Param(
         [Parameter(
@@ -1488,6 +1488,7 @@ Function Set-AzureAutomationTag
             Position = 2
         )]
         [string]
+        [ValidateSet('CurrentCommit','RepositoryName')]
         $TagName,
 
         [Parameter(
@@ -1522,7 +1523,7 @@ Function Set-AzureAutomationTag
         Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName
 
         $CommonParameters = @{
-            'ResourceGroupName' = 'ResourceGroupName'
+            'ResourceGroupName' = $ResourceGroupName
             'AutomationAccountName' = $AutomationAccountName
         }
 
@@ -1544,10 +1545,19 @@ Function Set-AzureAutomationTag
             }
             'Variable'
             {
-                $Description = "$($Variable.Description)`n`r__RepositoryName:$($RepositoryName);CurrentCommit:$($CurrentCommit);__"
+                $Variable = Get-AzureRmAutomationVariable -Name $Name @CommonParameters
+                $DescriptionObj = ConvertFrom-AutomationDescriptionTagLine -InputObject $Variable.Description
+                $DescriptionObj.$TagName = $Value
+                $UpdatedDescription = ConvertTo-AutomationDescriptionTagLine @DescriptionObj
+                $Null = Set-AzureRmAutomationVariable -Name $Name -Description $UpdatedDescription @CommonParameters
             }
             'Schedule'
             {
+                $Schedule = Get-AzureRmAutomationSchedule -Name $Name @CommonParameters
+                $DescriptionObj = ConvertFrom-AutomationDescriptionTagLine -InputObject $Schedule.Description
+                $DescriptionObj.$TagName = $Value
+                $UpdatedDescription = ConvertTo-AutomationDescriptionTagLine @DescriptionObj
+                $Null = Set-AzureRmAutomationSchedule -Name $Name -Description $UpdatedDescription @CommonParameters
             }
         }
     }
