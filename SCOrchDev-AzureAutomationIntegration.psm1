@@ -1,4 +1,8 @@
 ﻿#requires -Version 3 -Modules SCOrchDev-Exception, SCOrchDev-GitIntegration, SCOrchDev-Utility
+
+$RepositoryNameRegex = '__RepositoryName:([^;]+);'
+$CurrentCommitRegex = 'CurrentCommit:([^;]+);__'
+
 <#
     .Synopsis
         Takes a ps1 file and publishes it to the current Azure Automation environment.
@@ -1575,34 +1579,62 @@ Function ConvertFrom-AutomationDescriptionTagLine
     )
 
     $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
-    $CompletedParams = Write-StartingMessage
+    $CompletedParams = Write-StartingMessage -Stream Debug
 
-    Try
-    {
-        $KeyValueHT = @{}
-        $Pattern = '__([^:]+:[^;]+;)+__'
-        $Matches = $InputObject | Select-String -AllMatches $Pattern | 
-            Select-Object -ExpandProperty Matches | 
-            Select-Object -ExpandProperty Value
-        $Matches = $InputObject |
-            Select-String -AllMatches '__([^:]+:[^;]+;)+__' |
-            Select-Object -ExpandProperty Matches |
-            Select-Object -ExpandProperty Value
-
-        $Matches[1].Captures.Value | Foreach-Object { 
-            $Key, $Value = $_.Split(';:')
-            $Null = $KeyValueHT.Add($Key,$Value)
-        }
+    $KeyValueHT = @{
+        'Description' = $InputObject
+        'CurrentCommit' = 'Unknown'
+        'RepositoryName' = 'Unknown'
     }
-    Catch
+    if($InputObject -match $RepositoryNameRegex)
     {
+        $KeyValueHT.RepositoryName = $Matches[1]
+    }
+
+    if($InputObject -match $CurrentCommitRegex)
+    {
+        $KeyValueHT.CurrentCommit = $Matches[1]
     }
     
-    Write-CompletedMessage @CompletedParams
+    Write-CompletedMessage @CompletedParams -Status ($KeyValueHT | ConvertTo-Json)
+    Return $KeyValueHT
 }
 
 Function ConvertTo-AutomationDescriptionTagLine
 {
+    Param(
+        [Parameter(
+            Mandatory = $True,
+            ValueFromPipeline = $True,
+            Position = 0
+        )]
+        [string]
+        $Description,
+
+        [Parameter(
+            Mandatory = $True,
+            ValueFromPipeline = $True,
+            Position = 1
+        )]
+        [string]
+        $CurrentCommit,
+
+        [Parameter(
+            Mandatory = $True,
+            ValueFromPipeline = $True,
+            Position = 2
+        )]
+        [string]
+        $RepositoryName
+    )
+
+    $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
+    $CompletedParams = Write-StartingMessage -Stream Debug
+
+    $Description = $Description -replace $RepositoryNameRegex, "__RepositoryName:$($RepositoryName);"
+    $Description = $Description -replace $CurrentCommitRegex, "CurrentCommit:$($CurrentCommit);__"
     
+    Write-CompletedMessage @CompletedParams -Status $Description
+    Return $Description
 }
 Export-ModuleMember -Function * -Verbose:$false
