@@ -1,9 +1,9 @@
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 $manifestPath = "$here\SCOrchDev-AzureAutomationIntegration.psd1"
-Import-Module $manifestPath -Force
+Import-Module 'SCOrchDev-AzureAutomationIntegration' -Force
 
-Describe -Tags 'VersionChecks' 'SCOrchDev-F5 AzureAutomationIntegration' {
+Describe -Tags 'VersionChecks' 'SCOrchDev-AzureAutomationIntegration' {
     $script:manifest = $null
     It 'has a valid manifest' {
         {
@@ -77,7 +77,7 @@ if ($PSVersionTable.PSVersion.Major -ge 3)
 }
 
 Describe 'Style rules' {
-    $_ModuleBase = (Get-Module SCOrchDev-GitIntegration).ModuleBase
+    $_ModuleBase = (Get-Module SCOrchDev-AzureAutomationIntegration).ModuleBase
 
     $files = @(
         Get-ChildItem $_ModuleBase -Include *.ps1,*.psm1
