@@ -54,6 +54,10 @@ Function Publish-AzureAutomationRunbookChange
 
     Try
     {
+        if($FilePath -like '*.tests.ps1')
+        {
+            Throw-Exception -Type 'PesterTestFile' -Message 'This file is a pester test file. Do not publish.'
+        }
         Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName
 
         $RunbookInformation = Get-AzureAutomationRunbookInformation -FileName $FilePath `
@@ -91,6 +95,10 @@ Function Publish-AzureAutomationRunbookChange
         $ExceptionInfo = Get-ExceptionInfo -Exception $Exception
         Switch ($Exception.FullyQualifiedErrorId)
         {
+            'PesterTestFile'
+            {
+                Write-Verbose -Message 'Skipping this file. Pester test files are not published.'
+            }
             Default
             {
                 Write-Exception -Stream Warning -Exception $_
@@ -1684,25 +1692,5 @@ Function ConvertTo-AutomationDescriptionTagLine
     
     Write-CompletedMessage @CompletedParams -Status $Description
     Return $Description
-}
-Function Convert-PesterJSONToHTMLTable
-{
-    Param(
-        [Parameter(
-            Mandatory = $True,
-            ValueFromPipeline = $True,
-            Position = 0
-        )]
-        [string]
-        $InputObject
-    )
-
-    $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
-    $CompletedParams = Write-StartingMessage -Stream Debug
-
-
-
-    Write-CompletedMessage @CompletedParams -Status $Description
-    Return $Table
 }
 Export-ModuleMember -Function * -Verbose:$false
