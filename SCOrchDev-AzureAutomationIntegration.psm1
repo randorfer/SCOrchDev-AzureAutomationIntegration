@@ -47,7 +47,11 @@ Function Publish-AzureAutomationRunbookChange
 
         [Parameter(Mandatory = $True)]
         [String]
-        $ResourceGroupName
+        $ResourceGroupName,
+
+        [Parameter(Mandatory = $False)]
+        [string]
+        $Tenant = $Null
     )
     $CompletedParams = Write-StartingMessage -String $FilePath
     $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
@@ -58,7 +62,7 @@ Function Publish-AzureAutomationRunbookChange
         {
             Throw-Exception -Type 'PesterTestFile' -Message 'This file is a pester test file. Do not publish.'
         }
-        Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName
+        Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName -Tenant $Tenant
 
         $RunbookInformation = Get-AzureAutomationRunbookInformation -FileName $FilePath `
                                                                     -RepositoryName $RepositoryName `
@@ -137,14 +141,18 @@ Function Publish-AzureAutomationDSCChange
 
         [Parameter(Mandatory = $True)]
         [String]
-        $ResourceGroupName
+        $ResourceGroupName,
+
+        [Parameter(Mandatory = $False)]
+        [string]
+        $Tenant = $Null
     )
     $CompletedParams = Write-StartingMessage -String $FilePath
     $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
 
     Try
     {
-        Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName
+        Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName -Tenant $Tenant
 
         <#
             do smart things
@@ -208,7 +216,11 @@ Function Publish-AzureAutomationSettingsFileChange
 
         [Parameter(Mandatory = $True)]
         [String]
-        $ResourceGroupName
+        $ResourceGroupName,
+
+        [Parameter(Mandatory = $False)]
+        [string]
+        $Tenant = $Null
     )
     
     $CompletedParams = Write-StartingMessage -String $FilePath
@@ -216,7 +228,7 @@ Function Publish-AzureAutomationSettingsFileChange
 
     Try
     {
-        Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName
+        Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName -Tenant $Tenant
 
         $Variables = Get-GlobalFromFile -FilePath $FilePath -GlobalType Variables        
         foreach($VariableName in $Variables.Keys)
@@ -387,14 +399,18 @@ Function Remove-AzureAutomationOrphanAsset
 
         [Parameter(Mandatory = $True)]
         [PSCustomObject] 
-        $RepositoryInformation
+        $RepositoryInformation,
+
+        [Parameter(Mandatory = $False)]
+        [string]
+        $Tenant = $Null
     )
 
     $CompletedParams = Write-StartingMessage
     $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
     Try
     {
-        Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName      
+        Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName -Tenant $Tenant
 
         $AzureAutomationVariables = Get-AzureRmAutomationVariable -AutomationAccountName $AutomationAccountName `
                                                                   -ResourceGroupName $ResourceGroupName
@@ -535,14 +551,18 @@ Function Remove-AzureAutomationOrphanRunbook
 
         [Parameter(Mandatory = $True)]
         [PSCustomObject] 
-        $RepositoryInformation
+        $RepositoryInformation,
+
+        [Parameter(Mandatory = $False)]
+        [string]
+        $Tenant = $Null
     )
 
     $CompletedParams = Write-StartingMessage
     $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
     Try
     {
-        Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName
+        Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName -Tenant $Tenant
 
         $AzureAutomationRunbook = Get-AzureRmAutomationRunbook -AutomationAccountName $AutomationAccountName `
                                                                 -ResourceGroupName $ResourceGroupName
@@ -634,7 +654,11 @@ Function Remove-AzureAutomationOrphanDSC
 
         [Parameter(Mandatory = $True)]
         [PSCustomObject] 
-        $RepositoryInformation
+        $RepositoryInformation,
+
+        [Parameter(Mandatory = $False)]
+        [string]
+        $Tenant = $Null
     )
 
     $CompletedParams = Write-StartingMessage
@@ -773,7 +797,11 @@ Function Sync-GitRepositoryToAzureAutomation
 
         [Parameter(Mandatory = $True)]
         [string]
-        $ResourceGroupName
+        $ResourceGroupName,
+
+        [Parameter(Mandatory = $False)]
+        [string]
+        $Tenant = $Null
     )
     
     $CompletedParams = Write-StartingMessage -String $RepositoryName
@@ -791,6 +819,7 @@ Function Sync-GitRepositoryToAzureAutomation
                                                                                    -AutomationAccountName $AutomationAccountName `
                                                                                    -SubscriptionName $SubscriptionName `
                                                                                    -ResourceGroupName $ResourceGroupName `
+                                                                                   -Tenant $Tenant
     }
 
     Write-CompletedMessage @CompletedParams
@@ -830,7 +859,11 @@ Function Sync-IndividualGitRepositoryToAzureAutomation
 
         [Parameter(Mandatory = $True)]
         [string]
-        $ResourceGroupName
+        $ResourceGroupName,
+
+        [Parameter(Mandatory = $False)]
+        [string]
+        $Tenant = $Null
     )
     
     $CompletedParams = Write-StartingMessage -String "[$RepositoryName] $(ConvertTo-Json -InputObject $RepositoryInformation)"
@@ -869,7 +902,8 @@ Function Sync-IndividualGitRepositoryToAzureAutomation
                                                     -AutomationAccountName $AutomationAccountName `
                                                     -Credential $SubscriptionAccessCredential `
                                                     -RepositoryInformation $RepositoryInformation `
-                                                    -ResourceGroupName $ResourceGroupName
+                                                    -ResourceGroupName $ResourceGroupName `
+                                                    -Tenant $Tenant
             }
             if($ReturnInformation.CleanAssets)
             {
@@ -878,7 +912,8 @@ Function Sync-IndividualGitRepositoryToAzureAutomation
                                                     -AutomationAccountName $AutomationAccountName `
                                                     -Credential $SubscriptionAccessCredential `
                                                     -RepositoryInformation $RepositoryInformation `
-                                                    -ResourceGroupName $ResourceGroupName
+                                                    -ResourceGroupName $ResourceGroupName `
+                                                    -Tenant $Tenant
             }
             if($ReturnInformation.CleanDSC)
             {
@@ -887,7 +922,8 @@ Function Sync-IndividualGitRepositoryToAzureAutomation
                                                 -AutomationAccountName $AutomationAccountName `
                                                 -Credential $SubscriptionAccessCredential `
                                                 -RepositoryInformation $RepositoryInformation `
-                                                -ResourceGroupName $ResourceGroupName
+                                                -ResourceGroupName $ResourceGroupName `
+                                                -Tenant $Tenant
             }
                 
             Foreach($SettingsFilePath in $ReturnInformation.SettingsFiles)
@@ -898,7 +934,8 @@ Function Sync-IndividualGitRepositoryToAzureAutomation
                                                             -Credential $SubscriptionAccessCredential `
                                                             -AutomationAccountName $AutomationAccountName `
                                                             -SubscriptionName $SubscriptionName `
-                                                            -ResourceGroupName $ResourceGroupName
+                                                            -ResourceGroupName $ResourceGroupName `
+                                                            -Tenant $Tenant
             }
             Foreach($RunbookFilePath in $ReturnInformation.ScriptFiles)
             {
@@ -908,7 +945,8 @@ Function Sync-IndividualGitRepositoryToAzureAutomation
                                                         -Credential $SubscriptionAccessCredential `
                                                         -AutomationAccountName $AutomationAccountName `
                                                         -SubscriptionName $SubscriptionName `
-                                                        -ResourceGroupName $ResourceGroupName
+                                                        -ResourceGroupName $ResourceGroupName `
+                                                        -Tenant $Tenant
             }
             Foreach($DSCFilePath in $ReturnInformation.DSCFiles)
             {
@@ -918,7 +956,8 @@ Function Sync-IndividualGitRepositoryToAzureAutomation
                                                     -Credential $SubscriptionAccessCredential `
                                                     -AutomationAccountName $AutomationAccountName `
                                                     -SubscriptionName $SubscriptionName `
-                                                    -ResourceGroupName $ResourceGroupName
+                                                    -ResourceGroupName $ResourceGroupName `
+                                                    -Tenant $Tenant
             }
             
             if($ReturnInformation.ModuleFiles)
@@ -1428,7 +1467,11 @@ Function Connect-AzureRmAccount
         
         [Parameter(Mandatory = $True)]
         [String]
-        $SubscriptionName
+        $SubscriptionName,
+
+        [Parameter(Mandatory = $False)]
+        [String]
+        $Tenant
     )
 
     $CompletedParams = Write-StartingMessage -String $SubscriptionName
@@ -1436,11 +1479,22 @@ Function Connect-AzureRmAccount
 
     Try
     {
+        $SPNParams = @{
+            'ServicePrincipal' = $True
+            'Tenant' = $Tenant
+        }
         if(-not (Get-Module -Name AzureRM.profile)) { $Null = Import-Module -Name AzureRM.profile *>&1 }
         if(-not (Test-AzureRMConnection -Credential $Credential -SubscriptionName $SubscriptionName))
         {
             Write-Verbose -Message 'Establishing new connection'
-            $Null = Add-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName
+            if($Tenant -as [bool])
+            {
+                $Null = Add-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName @SPNParams
+            }
+            else
+            {
+                $Null = Add-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName
+            }
         }
         else
         {
