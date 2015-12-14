@@ -70,7 +70,8 @@ Function Publish-AzureAutomationRunbookChange
                                                                     -AutomationAccountName $AutomationAccountName `
                                                                     -SubscriptionName $SubscriptionName `
                                                                     -ResourceGroupName $ResourceGroupName `
-                                                                    -CurrentCommit $CurrentCommit
+                                                                    -CurrentCommit $CurrentCommit `
+                                                                    -Tenant $Tenant
         if($RunbookInformation.Update)
         {
             $UpdateCompleteParams = Write-StartingMessage -CommandName 'Updating Runbook' -String "[$($RunbookInformation | ConvertTo-Json)]"
@@ -1255,7 +1256,11 @@ Function Get-AzureAutomationRunbookInformation
 
         [Parameter(Mandatory = $False)]
         [String]
-        $CurrentCommit = '-1'
+        $CurrentCommit = '-1',
+
+        [Parameter(Mandatory = $False)]
+        [string]
+        $Tenant = $Null
     )
 
     $CompletedParams = Write-StartingMessage -String $FileName
@@ -1263,7 +1268,7 @@ Function Get-AzureAutomationRunbookInformation
 
     Try
     {
-        Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName
+        Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName -Tenant $Tenant
         
         if(Test-FileIsWorkflow -FilePath $FilePath)
         {
