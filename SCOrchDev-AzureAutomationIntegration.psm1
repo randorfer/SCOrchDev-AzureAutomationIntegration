@@ -113,6 +113,65 @@ Function Publish-AzureAutomationRunbookChange
 
     Write-CompletedMessage @CompletedParams
 }
+Function Publish-AzureAutomationPowerShellModule
+{
+    Param(
+        [Parameter(Mandatory = $True)]
+        [String] 
+        $FilePath,
+        
+        [Parameter(Mandatory = $True)]
+        [String]
+        $CurrentCommit,
+
+        [Parameter(Mandatory = $True)]
+        [String]
+        $RepositoryName,
+
+        [Parameter(Mandatory = $True)]
+        [PSCredential]
+        $Credential,
+
+        [Parameter(Mandatory = $True)]
+        [String]
+        $AutomationAccountName,
+
+        [Parameter(Mandatory = $True)]
+        [String]
+        $SubscriptionName,
+
+        [Parameter(Mandatory = $True)]
+        [String]
+        $ResourceGroupName,
+
+        [Parameter(Mandatory = $False)]
+        [string]
+        $Tenant = $Null
+    )
+    $CompletedParams = Write-StartingMessage -String $FilePath
+    $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
+
+    Try
+    {
+        Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName -Tenant $Tenant
+
+        
+    }
+    Catch
+    {
+        $Exception = $_
+        $ExceptionInfo = Get-ExceptionInfo -Exception $Exception
+        Switch ($Exception.FullyQualifiedErrorId)
+        {
+            Default
+            {
+                Write-Exception -Stream Warning -Exception $_
+            }
+        }
+    }
+
+    Write-CompletedMessage @CompletedParams
+}
 Function Publish-AzureAutomationDSCChange
 {
     Param(
