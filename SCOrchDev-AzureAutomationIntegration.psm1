@@ -1043,37 +1043,6 @@ Function Sync-IndividualGitRepositoryToAzureAutomation
                                                         -PowerShellModuleFolder $RepositoryInformation.PowerShellModuleFolder `
                                                         -DSCFolder $RepositoryInformation.DSCFolder
 
-            if($ReturnInformation.CleanRunbooks)
-            {
-                Remove-AzureAutomationOrphanRunbook -RepositoryName $RepositoryName `
-                                                    -Credential $SubscriptionAccessCredential `
-                                                    -AutomationAccountName $AutomationAccountName `
-                                                    -ResourceGroupName $ResourceGroupName `
-                                                    -SubscriptionName $SubscriptionName `
-                                                    -RepositoryInformation $RepositoryInformation `
-                                                    -Tenant $Tenant
-            }
-            if($ReturnInformation.CleanAssets)
-            {
-                Remove-AzureAutomationOrphanAsset -RepositoryName $RepositoryName `
-                                                  -Credential $SubscriptionAccessCredential `
-                                                  -AutomationAccountName $AutomationAccountName `
-                                                  -ResourceGroupName $ResourceGroupName `
-                                                  -SubscriptionName $SubscriptionName `
-                                                  -RepositoryInformation $RepositoryInformation `
-                                                  -Tenant $Tenant
-            }
-            if($ReturnInformation.CleanDSC)
-            {
-                Remove-AzureAutomationOrphanDSC -RepositoryName $RepositoryName `
-                                                -Credential $SubscriptionAccessCredential `
-                                                -AutomationAccountName $AutomationAccountName `
-                                                -ResourceGroupName $ResourceGroupName `
-                                                -SubscriptionName $SubscriptionName `
-                                                -RepositoryInformation $RepositoryInformation `
-                                                -Tenant $Tenant
-            }
-                
             Foreach($SettingsFilePath in $ReturnInformation.SettingsFiles)
             {
                 Publish-AzureAutomationSettingsFileChange -FilePath $SettingsFilePath `
@@ -1111,8 +1080,45 @@ Function Sync-IndividualGitRepositoryToAzureAutomation
             Foreach($ModuleFilePath in $ReturnInformation.ModuleFiles)
             {
                 Publish-AzureAutomationPowerShellModule -FilePath $ModuleFilePath `
-                                                            -StorageAccountName $StorageAccountName `
-                                                            @CommonPublishAzureAutomationParam
+                                                        -StorageAccountName $StorageAccountName `
+                                                        -CurrentCommit $RepositoryChange.CurrentCommit `
+                                                        -RepositoryName $RepositoryName `
+                                                        -Credential $SubscriptionAccessCredential `
+                                                        -AutomationAccountName $AutomationAccountName `
+                                                        -SubscriptionName $SubscriptionName `
+                                                        -ResourceGroupName $ResourceGroupName `
+                                                        -Tenant $Tenant
+            }
+
+            if($ReturnInformation.CleanRunbooks)
+            {
+                Remove-AzureAutomationOrphanRunbook -RepositoryName $RepositoryName `
+                                                    -Credential $SubscriptionAccessCredential `
+                                                    -AutomationAccountName $AutomationAccountName `
+                                                    -ResourceGroupName $ResourceGroupName `
+                                                    -SubscriptionName $SubscriptionName `
+                                                    -RepositoryInformation $RepositoryInformation `
+                                                    -Tenant $Tenant
+            }
+            if($ReturnInformation.CleanAssets)
+            {
+                Remove-AzureAutomationOrphanAsset -RepositoryName $RepositoryName `
+                                                  -Credential $SubscriptionAccessCredential `
+                                                  -AutomationAccountName $AutomationAccountName `
+                                                  -ResourceGroupName $ResourceGroupName `
+                                                  -SubscriptionName $SubscriptionName `
+                                                  -RepositoryInformation $RepositoryInformation `
+                                                  -Tenant $Tenant
+            }
+            if($ReturnInformation.CleanDSC)
+            {
+                Remove-AzureAutomationOrphanDSC -RepositoryName $RepositoryName `
+                                                -Credential $SubscriptionAccessCredential `
+                                                -AutomationAccountName $AutomationAccountName `
+                                                -ResourceGroupName $ResourceGroupName `
+                                                -SubscriptionName $SubscriptionName `
+                                                -RepositoryInformation $RepositoryInformation `
+                                                -Tenant $Tenant
             }
 
             $UpdatedRepositoryInformation = (Update-RepositoryInformationCommitVersion -RepositoryInformationJSON $RepositoryInformationJSON `
@@ -1259,13 +1265,14 @@ Function Test-AzureAutomationRunbookExist
         $ExceptionInfo = Get-ExceptionInfo -Exception $Exception
         Switch ($Exception.FullyQualifiedErrorId)
         {
-            'Microsoft.Azure.Commands.Automation.Common.ResourceCommonException,Microsoft.Azure.Commands.Automation.Cmdlet.GetAzureAutomationRunbook'
+            'Microsoft.Azure.Commands.Automation.Cmdlet.GetAzureAutomationRunbook'
             {
                 $Runbook = $False
             }
             Default
             {
-                Throw
+                Write-Exception -Exception $_ -Stream Warning
+                $Runbook = $False
             }
         }
     }
@@ -1342,7 +1349,8 @@ Function Test-AzureAutomationGlobalExist
             }
             Default
             {
-                Throw
+                Write-Exception -Exception $_ -Stream Warning
+                $Global = $False
             }
         }
     }
