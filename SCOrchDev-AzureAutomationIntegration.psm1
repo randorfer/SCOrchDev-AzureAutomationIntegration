@@ -1022,33 +1022,16 @@ Function Sync-IndividualGitRepositoryToAzureAutomation
             
             if($ReturnInformation.ModuleFiles)
             {
-                Try
+                Foreach($ModuleFile in $ReturnInformation.ModuleFiles)
                 {
-                    Write-Verbose -Message 'Validating Module Path on Runbook Wokers'
-                    $RepositoryModulePath = "$($RepositoryInformation.Path)\$($RepositoryInformation.PowerShellModuleFolder)"
-                    Invoke-Command -ComputerName $RunbookWorker -Credential $RunbookWorkerAccessCredenial -ScriptBlock {
-                        $RepositoryModulePath = $Using:RepositoryModulePath
-                        Try
-                        {
-                            Add-PSEnvironmentPathLocation -Path $RepositoryModulePath -Location Machine
-                        }
-                        Catch
-                        {
-                            $Exception = New-Exception -Type 'PowerShellModulePathValidationError' `
-                                                -Message 'Failed to set PSModulePath' `
-                                                -Property @{
-                                'ErrorMessage' = (Convert-ExceptionToString -String $_) ;
-                                'RepositoryModulePath' = $RepositoryModulePath ;
-                                'RunbookWorker' = $env:COMPUTERNAME ;
-                            }
-                            Write-Warning -Message $Exception -WarningAction Continue
-                        }
-                    }
-                    Write-Verbose -Message 'Finished Validating Module Path on Runbook Wokers'
-                }
-                Catch
-                {
-                    Write-Exception -Exception $_ -Stream Warning
+                    Publish-AzureAutomationRunbookChange -FilePath $RunbookFilePath `
+                                                        -CurrentCommit $RepositoryChange.CurrentCommit `
+                                                        -RepositoryName $RepositoryName `
+                                                        -Credential $SubscriptionAccessCredential `
+                                                        -AutomationAccountName $AutomationAccountName `
+                                                        -SubscriptionName $SubscriptionName `
+                                                        -ResourceGroupName $ResourceGroupName `
+                                                        -Tenant $Tenant
                 }
             }
             $UpdatedRepositoryInformation = (Update-RepositoryInformationCommitVersion -RepositoryInformationJSON $RepositoryInformationJSON `
