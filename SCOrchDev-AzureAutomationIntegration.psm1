@@ -1050,6 +1050,20 @@ Function Sync-IndividualGitRepositoryToAzureAutomation
                                                           -ResourceGroupName $ResourceGroupName `
                                                           -Tenant $Tenant
             }
+
+            Foreach($ModuleFilePath in $ReturnInformation.ModuleFiles)
+            {
+                Publish-AzureAutomationPowerShellModule -FilePath $ModuleFilePath `
+                                                        -StorageAccountName $StorageAccountName `
+                                                        -CurrentCommit $RepositoryChange.CurrentCommit `
+                                                        -RepositoryName $RepositoryName `
+                                                        -Credential $SubscriptionAccessCredential `
+                                                        -AutomationAccountName $AutomationAccountName `
+                                                        -SubscriptionName $SubscriptionName `
+                                                        -ResourceGroupName $ResourceGroupName `
+                                                        -Tenant $Tenant
+            }
+
             Foreach($RunbookFilePath in $ReturnInformation.ScriptFiles)
             {
                 Publish-AzureAutomationRunbookChange -FilePath $RunbookFilePath `
@@ -1071,19 +1085,6 @@ Function Sync-IndividualGitRepositoryToAzureAutomation
                                                  -SubscriptionName $SubscriptionName `
                                                  -ResourceGroupName $ResourceGroupName `
                                                  -Tenant $Tenant
-            }
-            
-            Foreach($ModuleFilePath in $ReturnInformation.ModuleFiles)
-            {
-                Publish-AzureAutomationPowerShellModule -FilePath $ModuleFilePath `
-                                                        -StorageAccountName $StorageAccountName `
-                                                        -CurrentCommit $RepositoryChange.CurrentCommit `
-                                                        -RepositoryName $RepositoryName `
-                                                        -Credential $SubscriptionAccessCredential `
-                                                        -AutomationAccountName $AutomationAccountName `
-                                                        -SubscriptionName $SubscriptionName `
-                                                        -ResourceGroupName $ResourceGroupName `
-                                                        -Tenant $Tenant
             }
 
             if($ReturnInformation.CleanRunbooks)
