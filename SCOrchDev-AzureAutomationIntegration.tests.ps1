@@ -48,6 +48,8 @@ Describe -Tags 'VersionChecks' 'SCOrchDev-AzureAutomationIntegration' {
 
     It 'should have all files listed in the FileList' {
         $ModuleFiles = (Get-ChildItem -Path $here -Recurse -Exclude .git).FullName
+        #Filter out NUnit
+        $ModuleFiles = $ModuleFiles | Where-Object { $_ -notlike '*\NUnitToHTML*' }
         $FileDifferences = Compare-Object -ReferenceObject $ModuleFiles -DifferenceObject $script:manifest.FileList
         
         if (($FileDifferences -as [array]).Count -gt 0)
