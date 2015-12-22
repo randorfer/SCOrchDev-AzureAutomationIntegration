@@ -1407,11 +1407,11 @@ Function Test-AzureAutomationGlobalExist
         $ExceptionInfo = Get-ExceptionInfo -Exception $Exception
         Switch ($Exception.FullyQualifiedErrorId)
         {
-            'Microsoft.Azure.Commands.Automation.Common.ResourceNotFoundException,Microsoft.Azure.Commands.Automation.Cmdlet.GetAzureAutomationVariable'
+            'Microsoft.Azure.Commands.Automation.Cmdlet.GetAzureAutomationVariable'
             {
                 $Global = $False
             }
-            'Microsoft.Azure.Commands.Automation.Common.ResourceNotFoundException,Microsoft.Azure.Commands.Automation.Cmdlet.GetAzureAutomationSchedule'
+            'Microsoft.Azure.Commands.Automation.Cmdlet.GetAzureAutomationSchedule'
             {
                 $Global = $False
             }
