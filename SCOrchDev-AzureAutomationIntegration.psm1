@@ -261,11 +261,41 @@ Function Publish-AzureAutomationDSCChange
 
     Try
     {
+        if($FilePath -like '*.tests.ps1')
+        {
+            Throw-Exception -Type 'PesterTestFile' -Message 'This file is a pester test file. Do not publish.'
+        }
         Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName -Tenant $Tenant
 
-        <#
-            do smart things
-        #>
+        $DSCInformation = Get-AzureAutomationDSCInformation -FileName $FilePath `
+                                                            -RepositoryName $RepositoryName `
+                                                            -Credential $Credential `
+                                                            -AutomationAccountName $AutomationAccountName `
+                                                            -SubscriptionName $SubscriptionName `
+                                                            -ResourceGroupName $ResourceGroupName `
+                                                            -CurrentCommit $CurrentCommit `
+                                                            -Tenant $Tenant
+        if($DSCInformation.Update)
+        {
+            $UpdateCompleteParams = Write-StartingMessage -CommandName 'Updating DSC Configuration' -String "[$($DSCInformation | ConvertTo-Json)]"
+            $Null = Import-AzureRmAutomationDscConfiguration `
+                -ResourceGroupName $ResourceGroupName `
+                –AutomationAccountName $AutomationAccountName `
+                -SourcePath $FilePath `
+                -Published `
+                –Force
+
+            $Null = Start-AzureRmAutomationDscCompilationJob `
+                -ResourceGroupName $ResourceGroupName `
+                –AutomationAccountName $AutomationAccountName `
+                -ConfigurationName $DSCInformation.ConfigurationName
+
+            Write-CompletedMessage @UpdateCompleteParams
+        }
+        else
+        {
+            Write-Verbose -Message "DSC Configuration is not a new version. Skipping. [$($DSCInformation | ConvertTo-Json)]"
+        }
     }
     Catch
     {
@@ -1000,7 +1030,7 @@ Function Sync-IndividualGitRepositoryToAzureAutomation
                                     -Branch $RepositoryInformation.Branch
         }
         $RepositoryChange = Find-GitRepositoryChange -Path $RepositoryInformation.Path `
-                                                        -StartCommit $RepositoryInformation.CurrentCommit
+                                                     -StartCommit $RepositoryInformation.CurrentCommit
             
         if(-not ($RepositoryChange.CurrentCommit -as [string]).Equals($RepositoryInformation.CurrentCommit -as [string]))
         {
@@ -1012,51 +1042,70 @@ Function Sync-IndividualGitRepositoryToAzureAutomation
                                                         -GlobalsFolder $RepositoryInformation.GlobalsFolder `
                                                         -PowerShellModuleFolder $RepositoryInformation.PowerShellModuleFolder `
                                                         -DSCFolder $RepositoryInformation.DSCFolder
-            $CommonRemoveAzureAutomationParam = @{
-                'RepositoryName' = $RepositoryName
-                'SubscriptionName' = $SubscriptionName
-                'AutomationAccountName' = $AutomationAccountName
-                'Credential' = $SubscriptionAccessCredential
-                'RepositoryInformation' = $RepositoryInformation
-                'ResourceGroupName' = $ResourceGroupName
-                'Tenant' = $Tenant
-            }
-            $CommonPublishAzureAutomationParam= @{
-                'RepositoryName' = $RepositoryName
-                'SubscriptionName' = $SubscriptionName
-                'AutomationAccountName' = $AutomationAccountName
-                'Credential' = $SubscriptionAccessCredential
-                'ResourceGroupName' = $ResourceGroupName
-                'Tenant' = $Tenant
-                'CurrentCommit' = $RepositoryChange.CurrentCommit
-            }
+
             if($ReturnInformation.CleanRunbooks)
             {
-                Remove-AzureAutomationOrphanRunbook @CommonRemoveAzureAutomationParam
+                Remove-AzureAutomationOrphanRunbook -RepositoryName $RepositoryName `
+                                                    -Credential $SubscriptionAccessCredential `
+                                                    -AutomationAccountName $AutomationAccountName `
+                                                    -ResourceGroupName $ResourceGroupName `
+                                                    -SubscriptionName $SubscriptionName `
+                                                    -RepositoryInformation $RepositoryInformation `
+                                                    -Tenant $Tenant
             }
             if($ReturnInformation.CleanAssets)
             {
-                Remove-AzureAutomationOrphanAsset @CommonRemoveAzureAutomationParam
+                Remove-AzureAutomationOrphanAsset -RepositoryName $RepositoryName `
+                                                  -Credential $SubscriptionAccessCredential `
+                                                  -AutomationAccountName $AutomationAccountName `
+                                                  -ResourceGroupName $ResourceGroupName `
+                                                  -SubscriptionName $SubscriptionName `
+                                                  -RepositoryInformation $RepositoryInformation `
+                                                  -Tenant $Tenant
             }
             if($ReturnInformation.CleanDSC)
             {
-                Remove-AzureAutomationOrphanDSC @CommonRemoveAzureAutomationParam
+                Remove-AzureAutomationOrphanDSC -RepositoryName $RepositoryName `
+                                                -Credential $SubscriptionAccessCredential `
+                                                -AutomationAccountName $AutomationAccountName `
+                                                -ResourceGroupName $ResourceGroupName `
+                                                -SubscriptionName $SubscriptionName `
+                                                -RepositoryInformation $RepositoryInformation `
+                                                -Tenant $Tenant
             }
                 
             Foreach($SettingsFilePath in $ReturnInformation.SettingsFiles)
             {
                 Publish-AzureAutomationSettingsFileChange -FilePath $SettingsFilePath `
-                                                            @CommonAzureAutomationVariables
+                                                          -CurrentCommit $RepositoryChange.CurrentCommit `
+                                                          -RepositoryName $RepositoryName `
+                                                          -Credential $SubscriptionAccessCredential `
+                                                          -AutomationAccountName $AutomationAccountName `
+                                                          -SubscriptionName $SubscriptionName `
+                                                          -ResourceGroupName $ResourceGroupName `
+                                                          -Tenant $Tenant
             }
             Foreach($RunbookFilePath in $ReturnInformation.ScriptFiles)
             {
                 Publish-AzureAutomationRunbookChange -FilePath $RunbookFilePath `
-                                                        @CommonPublishAzureAutomationParam
+                                                     -CurrentCommit $RepositoryChange.CurrentCommit `
+                                                     -RepositoryName $RepositoryName `
+                                                     -Credential $SubscriptionAccessCredential `
+                                                     -AutomationAccountName $AutomationAccountName `
+                                                     -SubscriptionName $SubscriptionName `
+                                                     -ResourceGroupName $ResourceGroupName `
+                                                     -Tenant $Tenant
             }
             Foreach($DSCFilePath in $ReturnInformation.DSCFiles)
             {
                 Publish-AzureAutomationDSCChange -FilePath $DSCFilePath `
-                                                    @CommonPublishAzureAutomationParam
+                                                 -CurrentCommit $RepositoryChange.CurrentCommit `
+                                                 -RepositoryName $RepositoryName `
+                                                 -Credential $SubscriptionAccessCredential `
+                                                 -AutomationAccountName $AutomationAccountName `
+                                                 -SubscriptionName $SubscriptionName `
+                                                 -ResourceGroupName $ResourceGroupName `
+                                                 -Tenant $Tenant
             }
             
             Foreach($ModuleFilePath in $ReturnInformation.ModuleFiles)
