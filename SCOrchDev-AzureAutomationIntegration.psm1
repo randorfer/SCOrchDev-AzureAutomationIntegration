@@ -64,7 +64,7 @@ Function Publish-AzureAutomationRunbookChange
         }
         Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName -Tenant $Tenant
 
-        $RunbookInformation = Get-AzureAutomationRunbookInformation -FileName $FilePath `
+        $RunbookInformation = Get-AzureAutomationRunbookInformation -FilePath $FilePath `
                                                                     -RepositoryName $RepositoryName `
                                                                     -Credential $Credential `
                                                                     -AutomationAccountName $AutomationAccountName `
@@ -267,7 +267,7 @@ Function Publish-AzureAutomationDSCChange
         }
         Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName -Tenant $Tenant
 
-        $DSCInformation = Get-AzureAutomationDSCInformation -FileName $FilePath `
+        $DSCInformation = Get-AzureAutomationDSCInformation -FilePath $FilePath `
                                                             -RepositoryName $RepositoryName `
                                                             -Credential $Credential `
                                                             -AutomationAccountName $AutomationAccountName `
@@ -278,12 +278,8 @@ Function Publish-AzureAutomationDSCChange
         if($DSCInformation.Update)
         {
             $UpdateCompleteParams = Write-StartingMessage -CommandName 'Updating DSC Configuration' -String "[$($DSCInformation | ConvertTo-Json)]"
-            $Null = Import-AzureRmAutomationDscConfiguration `
-                -ResourceGroupName $ResourceGroupName `
-                –AutomationAccountName $AutomationAccountName `
-                -SourcePath $FilePath `
-                -Published `
-                –Force
+            $ParameterSet = $DSCInformation.ParameterSet
+            $Null = Import-AzureRmAutomationDscConfiguration @ParameterSet
 
             $Null = Start-AzureRmAutomationDscCompilationJob `
                 -ResourceGroupName $ResourceGroupName `
@@ -1222,6 +1218,70 @@ Function Invoke-IntegrationTest
 }
 <#
     .Synopsis
+        Check to see if the target Configuration already exists in Azure Automation
+#>
+Function Test-AzureAutomationDSCConfigurationExist
+{
+    Param(
+        [Parameter(Mandatory = $True)]
+        [String] 
+        $Name,
+
+        [Parameter(Mandatory = $True)]
+        [PSCredential]
+        $Credential,
+
+        [Parameter(Mandatory = $True)]
+        [String]
+        $AutomationAccountName,
+
+        [Parameter(Mandatory = $True)]
+        [String]
+        $SubscriptionName,
+
+        [Parameter(Mandatory = $True)]
+        [String]
+        $ResourceGroupName,
+
+        [Parameter(Mandatory = $False)]
+        [String]
+        $Tenant = $Null
+    )
+
+    $CompletedParams = Write-StartingMessage -String $Name
+    $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
+
+    Try
+    {
+        Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName -Tenant $Tenant
+
+        $Configuration = Get-AzureRmAutomationDscConfiguration -Name $Name `
+                                                               -AutomationAccountName $AutomationAccountName `
+                                                               -ResourceGroupName $ResourceGroupName
+    }
+    Catch
+    {
+        $Exception = $_
+        $ExceptionInfo = Get-ExceptionInfo -Exception $Exception
+        Switch ($Exception.FullyQualifiedErrorId)
+        {
+            'Microsoft.Azure.Commands.Automation.Cmdlet.GetAzureAutomationDscConfiguration'
+            {
+                $Configuration = $False
+            }
+            Default
+            {
+                Write-Exception -Exception $Exception -Stream Warning
+                $Configuration = $False
+            }
+        }
+    }
+
+    Write-CompletedMessage @CompletedParams -Status $($Configuration -as [bool])
+    return $Configuration -as [bool]
+}
+<#
+    .Synopsis
         Check to see if the target Runbook already exists in Azure Automation
 #>
 Function Test-AzureAutomationRunbookExist
@@ -1245,7 +1305,11 @@ Function Test-AzureAutomationRunbookExist
 
         [Parameter(Mandatory = $True)]
         [String]
-        $ResourceGroupName
+        $ResourceGroupName,
+
+        [Parameter(Mandatory = $False)]
+        [String]
+        $Tenant = $Null
     )
 
     $CompletedParams = Write-StartingMessage -String $Name
@@ -1253,7 +1317,7 @@ Function Test-AzureAutomationRunbookExist
 
     Try
     {
-        Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName
+        Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName -Tenant $Tenant
 
         $Runbook = Get-AzureRmAutomationRunbook -Name $Name `
                                                 -AutomationAccountName $AutomationAccountName `
@@ -1271,7 +1335,7 @@ Function Test-AzureAutomationRunbookExist
             }
             Default
             {
-                Write-Exception -Exception $_ -Stream Warning
+                Write-Exception -Exception $Exception -Stream Warning
                 $Runbook = $False
             }
         }
@@ -1306,7 +1370,11 @@ Function Test-AzureAutomationGlobalExist
         [Parameter(Mandatory = $True)]
         [String]
         [ValidateSet('Variable','Schedule')]
-        $Type
+        $Type,
+
+        [Parameter(Mandatory = $False)]
+        [String]
+        $Tenant = $Null
     )
 
     $CompletedParams = Write-StartingMessage -String $Name
@@ -1314,7 +1382,7 @@ Function Test-AzureAutomationGlobalExist
 
     Try
     {
-        Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName
+        Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName -Tenant $Tenant
 
         switch($Type)
         {
@@ -1349,7 +1417,7 @@ Function Test-AzureAutomationGlobalExist
             }
             Default
             {
-                Write-Exception -Exception $_ -Stream Warning
+                Write-Exception -Exception $Exception -Stream Warning
                 $Global = $False
             }
         }
@@ -1358,12 +1426,12 @@ Function Test-AzureAutomationGlobalExist
     Write-CompletedMessage @CompletedParams
     return $Global -as [bool]
 }
-Function Get-AzureAutomationRunbookInformation
+Function Get-AzureAutomationDSCInformation
 {
     Param(
         [Parameter(Mandatory = $True)]
         [String] 
-        $FileName,
+        $FilePath,
 
         [Parameter(Mandatory = $True)]
         [String]
@@ -1394,7 +1462,109 @@ Function Get-AzureAutomationRunbookInformation
         $Tenant = $Null
     )
 
-    $CompletedParams = Write-StartingMessage -String $FileName
+    $CompletedParams = Write-StartingMessage -String $FilePath
+    $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
+
+    Try
+    {
+        Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName -Tenant $Tenant
+        $ConfigurationName = Get-DSCConfigurationName -FilePath $FilePath
+
+        if(Test-AzureAutomationDSCConfigurationExist -Name $ConfigurationName `
+                                            -Credential $Credential `
+                                            -AutomationAccountName $AutomationAccountName `
+                                            -SubscriptionName $SubscriptionName `
+                                            -ResourceGroupName $ResourceGroupName `
+                                            -Tenant $Tenant)
+        {
+            $DSCConfiguration = Get-AzureRmAutomationDscConfiguration -Name $ConfigurationName `
+                                                                      -ResourceGroupName $ResourceGroupName `
+                                                                      -AutomationAccountName $AutomationAccountName
+
+            $Tags = $DSCConfiguration.Tags
+            if($Tags.ContainsKey('CurrentCommit')) { $DSCCurrentCommit = $Tags.CurrentCommit }
+            else { $DSCCurrentCommit = -1 }
+            if($DSCCurrentCommit -ne $CurrentCommit) { $Tags.CurrentCommit = $CurrentCommit ; $Update = $True }
+            else { $Update = $False }
+            
+            $Description = $DSCConfiguration.Description
+        }
+        else
+        {
+            $Tags = @{ 
+                'RepositoryName' = $RepositoryName
+                'CurrentCommit' = $CurrentCommit
+            }
+            
+            $Update = $True
+            $Description = [string]::Empty
+        }
+    }
+    Catch
+    {
+        $Exception = $_
+        $ExceptionInfo = Get-ExceptionInfo -Exception $Exception
+        Switch ($Exception.FullyQualifiedErrorId)
+        {
+            Default
+            {
+                Throw
+            }
+        }
+    }
+
+    Write-CompletedMessage @CompletedParams
+    Return @{ 
+        'Update' = $Update
+        'ConfigurationName' = $ConfigurationName
+        'ParameterSet' = @{
+            'Tags' = $Tags
+            'AutomationAccountName' = $AutomationAccountName
+            'ResourceGroupName' = $ResourceGroupName
+            'SourcePath' = $FilePath
+            'Description' = $Description
+            'Force' = $True
+            'Published' = $True
+        }
+    }
+}
+Function Get-AzureAutomationRunbookInformation
+{
+    Param(
+        [Parameter(Mandatory = $True)]
+        [String] 
+        $FilePath,
+
+        [Parameter(Mandatory = $True)]
+        [String]
+        $RepositoryName,
+
+        [Parameter(Mandatory = $True)]
+        [PSCredential]
+        $Credential,
+
+        [Parameter(Mandatory = $True)]
+        [String]
+        $AutomationAccountName,
+
+        [Parameter(Mandatory = $True)]
+        [String]
+        $SubscriptionName,
+
+        [Parameter(Mandatory = $True)]
+        [String]
+        $ResourceGroupName,
+
+        [Parameter(Mandatory = $False)]
+        [String]
+        $CurrentCommit = '-1',
+
+        [Parameter(Mandatory = $False)]
+        [string]
+        $Tenant = $Null
+    )
+
+    $CompletedParams = Write-StartingMessage -String $FilePath
     $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
 
     Try
@@ -1416,7 +1586,8 @@ Function Get-AzureAutomationRunbookInformation
                                             -Credential $Credential `
                                             -AutomationAccountName $AutomationAccountName `
                                             -SubscriptionName $SubscriptionName `
-                                            -ResourceGroupName $ResourceGroupName)
+                                            -ResourceGroupName $ResourceGroupName `
+                                            -Tenant $Tenant)
         {
             $Runbook = Get-AzureRmAutomationRunbook -Name $Name `
                                                     -ResourceGroupName $ResourceGroupName `
@@ -1510,22 +1681,27 @@ Function Get-AzureAutomationGlobalInformation
         [Parameter(Mandatory = $True)]
         [String]
         [ValidateSet('Variable','Schedule')]
-        $Type
+        $Type,
+
+        [Parameter(Mandatory = $False)]
+        [String]
+        $Tenant = $null
     )
 
-    $CompletedParams = Write-StartingMessage -String $VariableName
+    $CompletedParams = Write-StartingMessage -String $Name
     $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
 
     Try
     {
-        Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName
+        Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName -Tenant $tenant
         
         if(Test-AzureAutomationGlobalExist -Name $Name `
                                            -Credential $Credential `
                                            -AutomationAccountName $AutomationAccountName `
                                            -SubscriptionName $SubscriptionName `
                                            -ResourceGroupName $ResourceGroupName `
-                                           -Type $Type)
+                                           -Type $Type `
+                                           -Tenant $tenant)
         {
             Switch($Type)
             {
@@ -1749,14 +1925,18 @@ Function Set-AzureAutomationIntegrationTag
 
         [Parameter(Mandatory = $True)]
         [String]
-        $ResourceGroupName
+        $ResourceGroupName,
+
+        [Parameter(Mandatory = $False)]
+        [String]
+        $Tenant = $Null
     )
     $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
     $CompletedParams = Write-StartingMessage
 
     Try
     {
-        Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName
+        Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName -Tenant $Tenant
 
         $CommonParameters = @{
             'ResourceGroupName' = $ResourceGroupName
