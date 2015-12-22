@@ -910,7 +910,11 @@ Function Sync-GitRepositoryToAzureAutomation
 
         [Parameter(Mandatory = $False)]
         [string]
-        $Tenant = $Null
+        $Tenant = $Null,
+
+        [Parameter(Mandatory = $True)]
+        [string]
+        $StorageAccountName
     )
     
     $CompletedParams = Write-StartingMessage -String $RepositoryName
@@ -928,7 +932,8 @@ Function Sync-GitRepositoryToAzureAutomation
                                                                                    -AutomationAccountName $AutomationAccountName `
                                                                                    -SubscriptionName $SubscriptionName `
                                                                                    -ResourceGroupName $ResourceGroupName `
-                                                                                   -Tenant $Tenant
+                                                                                   -Tenant $Tenant `
+                                                                                   -StorageAccountName $StorageAccountName
     }
 
     Write-CompletedMessage @CompletedParams
