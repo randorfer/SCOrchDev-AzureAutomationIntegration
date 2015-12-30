@@ -281,10 +281,21 @@ Function Publish-AzureAutomationDSCChange
             $ParameterSet = $DSCInformation.ParameterSet
             $Null = Import-AzureRmAutomationDscConfiguration @ParameterSet
 
-            $Null = Start-AzureRmAutomationDscCompilationJob `
-                -ResourceGroupName $ResourceGroupName `
-                –AutomationAccountName $AutomationAccountName `
-                -ConfigurationName $DSCInformation.ConfigurationName
+            if($DSCInformation.ConfigurationName -as [bool])
+            {
+                $Null = Start-AzureRmAutomationDscCompilationJob `
+                    -ResourceGroupName $ResourceGroupName `
+                    -AutomationAccountName $AutomationAccountName `
+                    -ConfigurationName $DSCInformation.ConfigurationName `
+                    -ConfigurationData $DSCInformation.ConfigurationData
+            }
+            else
+            {
+                $Null = Start-AzureRmAutomationDscCompilationJob `
+                    -ResourceGroupName $ResourceGroupName `
+                    -AutomationAccountName $AutomationAccountName `
+                    -ConfigurationName $DSCInformation.ConfigurationName
+            }
 
             Write-CompletedMessage @UpdateCompleteParams
         }
@@ -1470,7 +1481,23 @@ Function Get-AzureAutomationDSCInformation
     {
         Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName -Tenant $Tenant
         $ConfigurationName = Get-DSCConfigurationName -FilePath $FilePath
-
+        $NodeName = Get-DSCNodeName -FilePath $FilePath
+        if($NodeName -as [bool]) 
+        {
+            $ConfigurationData = @{
+                AllNodes = @(
+                    @{
+                        NodeName = "*"
+                        PSDscAllowPlainTextPassword = $True
+                    } 
+                ) 
+            }
+            $NodeName | ForEach-Object { $ConfigurationData.AllNodes += @{'NodeName' = $_ } }
+        } 
+        else
+        {
+            $ConfigurationData = $Null
+        }
         if(Test-AzureAutomationDSCConfigurationExist -Name $ConfigurationName `
                                             -Credential $Credential `
                                             -AutomationAccountName $AutomationAccountName `
@@ -1518,6 +1545,7 @@ Function Get-AzureAutomationDSCInformation
     Return @{ 
         'Update' = $Update
         'ConfigurationName' = $ConfigurationName
+        'ConfigurationData' = $ConfigurationData
         'ParameterSet' = @{
             'Tags' = $Tags
             'AutomationAccountName' = $AutomationAccountName
