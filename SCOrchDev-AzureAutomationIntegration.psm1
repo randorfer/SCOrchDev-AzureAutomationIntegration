@@ -313,7 +313,7 @@ Function Publish-AzureAutomationDSCChange
         {
             Default
             {
-                Write-Exception -Stream Warning -Exception $_
+                Write-Exception -Stream Warning -Exception $Exception
             }
         }
     }
