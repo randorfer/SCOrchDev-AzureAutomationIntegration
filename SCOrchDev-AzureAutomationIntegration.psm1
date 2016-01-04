@@ -1484,15 +1484,20 @@ Function Get-AzureAutomationDSCInformation
         $NodeName = Get-DSCNodeName -FilePath $FilePath
         if($NodeName -as [bool]) 
         {
-            $ConfigurationData = @{
-                AllNodes = @(
-                    @{
-                        NodeName = "*"
-                        PSDscAllowPlainTextPassword = $True
-                    } 
-                ) 
+            $AllNodes = @(
+                @{
+                    NodeName = '*'
+                    PSDscAllowPlainTextPassword = $True
+                }
+            )
+            Foreach($_NodeName in $NodeName)
+            {
+                $AllNodes += @{'NodeName' = $_NodeName }
             }
-            $NodeName | ForEach-Object { $ConfigurationData.AllNodes += @{'NodeName' = $_ } }
+
+            $ConfigurationData = @{
+                AllNodes = $AllNodes
+            }
         } 
         else
         {
