@@ -195,6 +195,20 @@ Function Publish-AzureAutomationPowerShellModule
                                               -ContentLink $ContentLink `
                                               -ResourceGroupName $ResourceGroupName `
                                               -AutomationAccountName $AutomationAccountName
+        
+        Write-Verbose -Message 'Waiting for module to import'
+        $TimeoutPeriod = (Get-Date).AddMinutes(15)
+        Do
+        {
+            Start-Sleep -Seconds 5
+            $Module = Get-AzureRmAutomationModule -Name $ModuleDefinition.Name `
+                                                  -ResourceGroupName $ResourceGroupName `
+                                                  -AutomationAccountName $AutomationAccountName
+            $Timeout = (Get-Date) -ge $TimeoutPeriod
+            Write-Debug -Message "Module Provisioning State [$($Module.ProvisioningState)] : Timeout [$Timeout]"
+        }
+        While((-not $TimeOut) -and ($Module.ProvisioningState -eq 'Creating' -or $Module.ProvisioningState -eq 'RunningImportModuleRunbook'))
+        Write-Verbose -Message "Module Imported. Provisioning State [$($Module.ProvisioningState)]"
     }
     Catch
     {
