@@ -1,7 +1,8 @@
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 
-$manifestPath = "$here\SCOrchDev-AzureAutomationIntegration.psd1"
-Import-Module 'SCOrchDev-AzureAutomationIntegration' -Force
+$ModuleRoot = "$here\.."
+$manifestPath = "$ModuleRoot\SCOrchDev-AzureAutomationIntegration.psd1"
+Import-Module $manifestPath -Force -Scope Local
 
 Describe -Tags 'VersionChecks' 'SCOrchDev-AzureAutomationIntegration' {
     $script:manifest = $null
@@ -47,7 +48,7 @@ Describe -Tags 'VersionChecks' 'SCOrchDev-AzureAutomationIntegration' {
     }
 
     It 'should have all files listed in the FileList' {
-        $ModuleFiles = (Get-ChildItem -Path $here -Recurse -Exclude .git).FullName
+        $ModuleFiles = (Get-ChildItem -Path $ModuleRoot -Recurse -Exclude .git -File).FullName
         #Filter out NUnit
         $ModuleFiles = $ModuleFiles | Where-Object { $_ -notlike '*\NUnitToHTML*' }
         $FileDifferences = Compare-Object -ReferenceObject $ModuleFiles -DifferenceObject $script:manifest.FileList
