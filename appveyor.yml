@@ -1,7 +1,6 @@
 install:
   - cinst pester
-  - ps: |
-  install-package SCOrchDev-Utility
+  - ps: install-package SCOrchDev-Utility
 
 
 build: false
