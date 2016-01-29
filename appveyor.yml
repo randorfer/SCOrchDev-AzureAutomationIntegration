@@ -6,7 +6,7 @@ platform: Any CPU
 # Install Pester
 install: 
     - cinst -y pester
-    - ps: install-package SCOrchDev-Utility
+    - ps: install-package -ProviderName PowerShellGet -Name SCOrchDev-Utility
 clone_folder: c:\git\PowerShellModules
 build: false
 
