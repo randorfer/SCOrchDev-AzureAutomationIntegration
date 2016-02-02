@@ -173,6 +173,22 @@ Function Publish-AzureAutomationPowerShellModule
                                 'Name' = $ModuleDefinition.Name
                             }
         }
+
+        $AutomationModule = Get-AzureRmAutomationModule -Name $ModuleDefinition.Name `
+                                                        -ResourceGroupName $ResourceGroupName `
+                                                        -AutomationAccountName $AutomationAccountName
+        
+        if($AutomationModule.Version -eq $ModuleDefinition.Version)
+        {
+            Throw-Exception -Type 'ModuleVersionAlreadyImported' `
+                            -Message 'This version of the module is already in automation' `
+                            -Property @{ 
+                                'Name' = $ModuleDefinition.Name
+                                'AutomationVersion' = $AutomationModule.Version -as [string]
+                                'LocalVersion' = $ModuleDefinition.Version -as [string]
+                            }
+        }
+
         $TempDirectory = New-TempDirectory
 
         $ZipFilePath = "$($TempDirectory.FullName)\$($ModuleDefinition.Name).zip"
