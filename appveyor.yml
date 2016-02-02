@@ -4,6 +4,7 @@ pull_requests:
 os: WMF 5
 clone_folder: c:\git\PowerShellModules
 init:
+- ps: git clone https://github.com/randorfer/SCOrchDev c:\git\scorchdev
 - ps: $env:PSModulePath = "$($env:PSModulePath);c:\Git\PowerShellMdoules;c:\git\ScorchDev\PowerShellModules"
 install:
 - cmd: cinst -y pester
