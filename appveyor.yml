@@ -13,7 +13,7 @@ nuget:
 build: false
 test_script:
 - ps: >-
-    get-childitem $env:
+    get-childitem env:
 
     $res = Invoke-Pester -Path "$($env:clone_folder)\Tests" -OutputFormat NUnitXml -OutputFile c:\TestsResults.xml -PassThru
 
