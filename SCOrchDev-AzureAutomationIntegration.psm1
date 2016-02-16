@@ -174,21 +174,27 @@ Function Publish-AzureAutomationPowerShellModule
                             }
         }
 
-        $AutomationModule = Get-AzureRmAutomationModule -Name $ModuleDefinition.Name `
+        if(Test-AzureAutomationGlobalExist -Name $ModuleDefinition.Name -ResourceGroupName $ResourceGroupName -AutomationAccountName $AutomationAccountName)
+        {
+            $AutomationModule = Get-AzureRmAutomationModule -Name $ModuleDefinition.Name `
                                                         -ResourceGroupName $ResourceGroupName `
                                                         -AutomationAccountName $AutomationAccountName
         
-        if($AutomationModule.Version -eq $ModuleDefinition.Version)
-        {
-            Throw-Exception -Type 'ModuleVersionAlreadyImported' `
-                            -Message 'This version of the module is already in automation' `
-                            -Property @{ 
-                                'Name' = $ModuleDefinition.Name
-                                'AutomationVersion' = $AutomationModule.Version -as [string]
-                                'LocalVersion' = $ModuleDefinition.Version -as [string]
-                            }
+            if($AutomationModule.Version -eq $ModuleDefinition.Version)
+            {
+                Throw-Exception -Type 'ModuleVersionAlreadyImported' `
+                                -Message 'This version of the module is already in automation' `
+                                -Property @{ 
+                                    'Name' = $ModuleDefinition.Name
+                                    'AutomationVersion' = $AutomationModule.Version -as [string]
+                                    'LocalVersion' = $ModuleDefinition.Version -as [string]
+                                }
+            }
         }
-
+        else
+        {
+            Write-Verbose -Message 'New module'
+        }
         $TempDirectory = New-TempDirectory
 
         $ZipFilePath = "$($TempDirectory.FullName)\$($ModuleDefinition.Name).zip"
@@ -1386,6 +1392,72 @@ Function Test-AzureAutomationRunbookExist
     Write-CompletedMessage @CompletedParams
     return $Runbook -as [bool]
 }
+
+<#
+    .Synopsis
+        Check to see if the target Runbook already exists in Azure Automation
+#>
+Function Test-AzureAutomationModuleExist
+{
+    Param(
+        [Parameter(Mandatory = $True)]
+        [String] 
+        $Name,
+
+        [Parameter(Mandatory = $True)]
+        [PSCredential]
+        $Credential,
+
+        [Parameter(Mandatory = $True)]
+        [String]
+        $AutomationAccountName,
+
+        [Parameter(Mandatory = $True)]
+        [String]
+        $SubscriptionName,
+
+        [Parameter(Mandatory = $True)]
+        [String]
+        $ResourceGroupName,
+
+        [Parameter(Mandatory = $False)]
+        [String]
+        $Tenant = $Null
+    )
+
+    $CompletedParams = Write-StartingMessage -String $Name
+    $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
+
+    Try
+    {
+        Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName -Tenant $Tenant
+
+        $AutomationModule = Get-AzureRmAutomationModule -Name $ModuleDefinition.Name `
+                                                -ResourceGroupName $ResourceGroupName `
+                                                -AutomationAccountName $AutomationAccountName
+    }
+    Catch
+    {
+        $Exception = $_
+        $ExceptionInfo = Get-ExceptionInfo -Exception $Exception
+        Switch ($Exception.FullyQualifiedErrorId)
+        {
+            'Microsoft.Azure.Commands.Automation.Cmdlet.GetAzureAutomationModule'
+            {
+                $Module = $False
+            }
+            Default
+            {
+                Write-Exception -Exception $Exception -Stream Warning
+                $Module = $False
+            }
+        }
+    }
+
+    Write-CompletedMessage @CompletedParams
+    return $Module -as [bool]
+}
+
 Function Test-AzureAutomationGlobalExist
 {
     Param(

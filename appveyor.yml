@@ -6,8 +6,6 @@ clone_folder: c:\git\PowerShellModules
 init:
 - ps: git clone -q --branch=master https://github.com/randorfer/SCOrchDev c:\git\scorchdev
 - ps: $env:PSModulePath = "$($env:PSModulePath);c:\Git\PowerShellMdoules;c:\git\ScorchDev\PowerShellModules"
-install:
-- cmd: cinst -y pester
 nuget:
   disable_publish_on_pr: true
 build: false
