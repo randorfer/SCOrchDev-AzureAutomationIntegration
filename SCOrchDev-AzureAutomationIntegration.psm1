@@ -174,7 +174,12 @@ Function Publish-AzureAutomationPowerShellModule
                             }
         }
 
-        if(Test-AzureAutomationGlobalExist -Name $ModuleDefinition.Name -ResourceGroupName $ResourceGroupName -AutomationAccountName $AutomationAccountName)
+        if(Test-AzureAutomationModuleExist -Name $ModuleDefinition.Name `
+                                           -ResourceGroupName $ResourceGroupName `
+                                           -AutomationAccountName $AutomationAccountName `
+                                           -SubscriptionName $SubscriptionName `
+                                           -Credential $Credential `
+                                           -Tenant $Tenant)
         {
             $AutomationModule = Get-AzureRmAutomationModule -Name $ModuleDefinition.Name `
                                                         -ResourceGroupName $ResourceGroupName `
