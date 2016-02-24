@@ -58,10 +58,6 @@ Function Publish-AzureAutomationRunbookChange
 
     Try
     {
-        if($FilePath -like '*.tests.ps1')
-        {
-            Throw-Exception -Type 'PesterTestFile' -Message 'This file is a pester test file. Do not publish.'
-        }
         Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName -Tenant $Tenant
 
         $RunbookInformation = Get-AzureAutomationRunbookInformation -FilePath $FilePath `
