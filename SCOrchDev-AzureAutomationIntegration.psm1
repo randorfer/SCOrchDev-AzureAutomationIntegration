@@ -1776,7 +1776,6 @@ Function Get-AzureAutomationRunbookInformation
             'Description' = $Description
             'Force' = $True
             'Published' = $True
-            'LogVerbose' = $True
         }
     }
 }
