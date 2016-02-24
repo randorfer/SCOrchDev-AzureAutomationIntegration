@@ -96,10 +96,6 @@ Function Publish-AzureAutomationRunbookChange
         $ExceptionInfo = Get-ExceptionInfo -Exception $Exception
         Switch ($Exception.FullyQualifiedErrorId)
         {
-            'PesterTestFile'
-            {
-                Write-Verbose -Message 'Skipping this file. Pester test files are not published.'
-            }
             Default
             {
                 Write-Exception -Stream Warning -Exception $Exception
