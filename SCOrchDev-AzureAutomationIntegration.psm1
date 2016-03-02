@@ -852,14 +852,104 @@ Function Remove-AzureAutomationOrphanDSC
     $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
     Try
     {
-        <#
-            Do smart things
-        #>
+        Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName -Tenant $Tenant
+
+        $AzureAutomationDSCConfiguration = Get-AzureRmAutomationDscConfiguration -ResourceGroupName $ResourceGroupName -AutomationAccountName $AutomationAccountName
+        if($AzureAutomationDSCConfiguration) 
+        {
+            # Grouping based on tags -- update function name to reflect more generic nature
+            $AzureAutomationDSCConfiguration = Group-RunbooksByRepository -InputObject $AzureAutomationDSCConfiguration 
+        }
+
+        $RepositoryDSCConfiguration = Get-GitRepositoryAssetName -Path "$($RepositoryInformation.Path)\$($RepositoryInformation.DSCFolder)"
+
+        if($AzureAutomationVariables."$RepositoryName" -as [bool])
+        {
+            $VariableDifferences = Compare-Object -ReferenceObject $AzureAutomationVariables."$RepositoryName".Name `
+                                                  -DifferenceObject $RepositoryAssets.Variable
+            Foreach($Difference in $VariableDifferences)
+            {
+                Try
+                {
+                    if($Difference.SideIndicator -eq '<=')
+                    {
+                        Write-Verbose -Message "[$($Difference.InputObject)] Does not exist in Source Control"
+                        Remove-AzureRmAutomationVariable -Name $Difference.InputObject `
+                                                         -AutomationAccountName $AutomationAccountName `
+                                                         -ResourceGroupName $ResourceGroupName `
+                                                         -Force
+                        Write-Verbose -Message "[$($Difference.InputObject)] Removed from Azure Automation"
+                    }
+                }
+                Catch
+                {
+                    $Exception = New-Exception -Type 'RemoveAzureAutomationAssetFailure' `
+                                                -Message 'Failed to remove an Azure Automation Asset' `
+                                                -Property @{
+                        'ErrorMessage' = (Convert-ExceptionToString -Exception $_) ;
+                        'AssetName' = $Difference.InputObject ;
+                        'AssetType' = 'Variable' ;
+                        'AutomationAccountName' = $AutomationAccountName ;
+                        'RepositoryName' = $RepositoryName ;
+                    }
+                    Write-Warning -Message $Exception -WarningAction Continue
+                }
+            }
+        }
+        else
+        {
+            Write-Verbose -Message "[$RepositoryName] No Variables found in environment for this repository"
+        }
+
+        $AzureAutomationSchedules = Get-AzureRmAutomationSchedule -AutomationAccountName $AutomationAccountName `
+                                                                  -ResourceGroupName $ResourceGroupName
+        if($AzureAutomationSchedules) 
+        {
+            $AzureAutomationSchedules = Group-AssetsByRepository -InputObject $AzureAutomationSchedules 
+        }
+
+        if($AzureAutomationSchedules."$RepositoryName")
+        {
+            $ScheduleDifferences = Compare-Object -ReferenceObject $AzureAutomationSchedules."$RepositoryName".Name `
+                                                  -DifferenceObject $RepositoryAssets.Schedule
+            Foreach($Difference in $ScheduleDifferences)
+            {
+                Try
+                {
+                    if($Difference.SideIndicator -eq '<=')
+                    {
+                        Write-Verbose -Message "[$($Difference.InputObject)] Does not exist in Source Control"
+                        Remove-AzureRmAutomationSchedule -Name $Difference.InputObject `
+                                                         -AutomationAccountName $AutomationAccountName `
+                                                         -ResourceGroupName $ResourceGroupName `
+                                                         -Force
+                        Write-Verbose -Message "[$($Difference.InputObject)] Removed from Azure Automation"
+                    }
+                }
+                Catch
+                {
+                    $Exception = New-Exception -Type 'RemoveAzureAutomationAssetFailure' `
+                                                -Message 'Failed to remove an Azure Automation Asset' `
+                                                -Property @{
+                        'ErrorMessage' = (Convert-ExceptionToString -Exception $_) ;
+                        'AssetName' = $Difference.InputObject ;
+                        'AssetType' = 'Schedule' ;
+                        'AutomationAccountName' = $AutomationAccountName ;
+                        'RepositoryName' = $RepositoryName ;
+                    }
+                    Write-Warning -Message $Exception -WarningAction Continue
+                }
+            }
+        }
+        else
+        {
+            Write-Verbose -Message "[$RepositoryName] No Schedules found in environment for this repository"
+        }
     }
     Catch
     {
-        $Exception = New-Exception -Type 'RemoveAzureAutomationOrphanRunbookWorkflowFailure' `
-                                   -Message 'Unexpected error encountered in the Remove-AzureAutomationOrphanRunbook workflow' `
+        $Exception = New-Exception -Type 'RemoveAzureAutomationOrphanAssetWorkflowFailure' `
+                                   -Message 'Unexpected error encountered in the Remove-AzureAutomationOrphanAsset workflow' `
                                    -Property @{
             'ErrorMessage' = (Convert-ExceptionToString -Exception $_) ;
             'RepositoryName' = $RepositoryName ;
