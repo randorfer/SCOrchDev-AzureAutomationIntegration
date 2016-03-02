@@ -602,7 +602,7 @@ Function Remove-AzureAutomationOrphanAsset
                                                                   -ResourceGroupName $ResourceGroupName
         if($AzureAutomationVariables) 
         {
-            $AzureAutomationVariables = Group-AssetsByRepository -InputObject $AzureAutomationVariables 
+            $AzureAutomationVariables = Group-AutomationAssetByDescriptionRepository -InputObject $AzureAutomationVariables 
         }
 
         $RepositoryAssets = Get-GitRepositoryAssetName -Path "$($RepositoryInformation.Path)\$($RepositoryInformation.GlobalsFolder)"
@@ -649,7 +649,7 @@ Function Remove-AzureAutomationOrphanAsset
                                                                   -ResourceGroupName $ResourceGroupName
         if($AzureAutomationSchedules) 
         {
-            $AzureAutomationSchedules = Group-AssetsByRepository -InputObject $AzureAutomationSchedules 
+            $AzureAutomationSchedules = Group-AutomationAssetByDescriptionRepository -InputObject $AzureAutomationSchedules 
         }
 
         if($AzureAutomationSchedules."$RepositoryName")
@@ -759,7 +759,7 @@ Function Remove-AzureAutomationOrphanRunbook
         }
         if($AzureAutomationRunbook) 
         {
-            $AzureAutomationRunbook = Group-RunbooksByRepository -InputObject $AzureAutomationRunbook 
+            $AzureAutomationRunbook = Group-AutomationAssetByTaggedRepository -InputObject $AzureAutomationRunbook 
         }
 
         $RepositoryWorkflows = Get-GitRepositoryRunbookName -Path "$($RepositoryInformation.Path)\$($RepositoryInformation.RunbookFolder)"
@@ -853,96 +853,69 @@ Function Remove-AzureAutomationOrphanDSC
     {
         Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName -Tenant $Tenant
 
-        $AzureAutomationDSCConfiguration = Get-AzureRmAutomationDscConfiguration -ResourceGroupName $ResourceGroupName -AutomationAccountName $AutomationAccountName
-        if($AzureAutomationDSCConfiguration) 
+        $AzureAutomationDSCConfiguration = Get-AzureRmAutomationDscConfiguration -ResourceGroupName $ResourceGroupName `
+                                                                                 -AutomationAccountName $AutomationAccountName
+
+        $AzureAutomationDSCNodeConfiguration = New-Object -TypeName System.Collections.ArrayList
+        Foreach($_AzureAutomationDSCConfiguration in $AzureAutomationDSCConfiguration)
         {
-            # Grouping based on tags -- update function name to reflect more generic nature
-            $AzureAutomationDSCConfiguration = Group-RunbooksByRepository -InputObject $AzureAutomationDSCConfiguration 
+            Get-AzureRmAutomationDscNodeConfiguration -ConfigurationName $_AzureAutomationDSCConfiguration.Name `
+                                                          -ResourceGroupName $ResourceGroupName `
+                                                          -AutomationAccountName $AutomationAccountName | `
+                ForEach-Object { $Null = $AzureAutomationDSCNodeConfiguration.Add($_.Name) }
         }
+        # No way currently to do tagging on DSC resources...have to check all repositories
+        $DSCNodeConfiguration = Get-GitRepositoryDSCInformation -Path "$($RepositoryInformation.Path)\..\"
 
-        $RepositoryDSCConfiguration = Get-GitRepositoryAssetName -Path "$($RepositoryInformation.Path)\$($RepositoryInformation.DSCFolder)"
-
-        if($AzureAutomationVariables."$RepositoryName" -as [bool])
+        $DSCNodeConfigurationDifferences = Compare-Object -ReferenceObject ($AzureAutomationDSCNodeConfiguration -as [string[]]) `
+                                                          -DifferenceObject ($DSCNodeConfiguration  -as [string[]])
+        Foreach($Difference in $DSCNodeConfigurationDifferences)
         {
-            $VariableDifferences = Compare-Object -ReferenceObject $AzureAutomationVariables."$RepositoryName".Name `
-                                                  -DifferenceObject $RepositoryAssets.Variable
-            Foreach($Difference in $VariableDifferences)
+            Try
             {
-                Try
+                if($Difference.SideIndicator -eq '<=')
                 {
-                    if($Difference.SideIndicator -eq '<=')
-                    {
-                        Write-Verbose -Message "[$($Difference.InputObject)] Does not exist in Source Control"
-                        Remove-AzureRmAutomationVariable -Name $Difference.InputObject `
-                                                         -AutomationAccountName $AutomationAccountName `
-                                                         -ResourceGroupName $ResourceGroupName `
-                                                         -Force
-                        Write-Verbose -Message "[$($Difference.InputObject)] Removed from Azure Automation"
-                    }
-                }
-                Catch
-                {
-                    $Exception = New-Exception -Type 'RemoveAzureAutomationAssetFailure' `
-                                                -Message 'Failed to remove an Azure Automation Asset' `
-                                                -Property @{
-                        'ErrorMessage' = (Convert-ExceptionToString -Exception $_) ;
-                        'AssetName' = $Difference.InputObject ;
-                        'AssetType' = 'Variable' ;
-                        'AutomationAccountName' = $AutomationAccountName ;
-                        'RepositoryName' = $RepositoryName ;
-                    }
-                    Write-Warning -Message $Exception -WarningAction Continue
+                    Write-Verbose -Message "[$($Difference.InputObject)] Does not exist in Source Control"
+                    $Null = Remove-AzureRmAutomationDscNodeConfiguration -Name $Difference.InputObject `
+                                                                         -AutomationAccountName $AutomationAccountName `
+                                                                         -ResourceGroupName $ResourceGroupName `
+                                                                         -Force
+                    Write-Verbose -Message "[$($Difference.InputObject)] Removed from Azure Automation"
                 }
             }
-        }
-        else
-        {
-            Write-Verbose -Message "[$RepositoryName] No Variables found in environment for this repository"
-        }
-
-        $AzureAutomationSchedules = Get-AzureRmAutomationSchedule -AutomationAccountName $AutomationAccountName `
-                                                                  -ResourceGroupName $ResourceGroupName
-        if($AzureAutomationSchedules) 
-        {
-            $AzureAutomationSchedules = Group-AssetsByRepository -InputObject $AzureAutomationSchedules 
-        }
-
-        if($AzureAutomationSchedules."$RepositoryName")
-        {
-            $ScheduleDifferences = Compare-Object -ReferenceObject $AzureAutomationSchedules."$RepositoryName".Name `
-                                                  -DifferenceObject $RepositoryAssets.Schedule
-            Foreach($Difference in $ScheduleDifferences)
+            Catch
             {
-                Try
-                {
-                    if($Difference.SideIndicator -eq '<=')
-                    {
-                        Write-Verbose -Message "[$($Difference.InputObject)] Does not exist in Source Control"
-                        Remove-AzureRmAutomationSchedule -Name $Difference.InputObject `
-                                                         -AutomationAccountName $AutomationAccountName `
-                                                         -ResourceGroupName $ResourceGroupName `
-                                                         -Force
-                        Write-Verbose -Message "[$($Difference.InputObject)] Removed from Azure Automation"
-                    }
+                $Exception = New-Exception -Type 'RemoveAzureAutomationDSCNodeConfigurationFailure' `
+                                            -Message 'Failed to remove an Azure Automation DSC Node Configuration' `
+                                            -Property @{
+                    'ErrorMessage' = (Convert-ExceptionToString -Exception $_) ;
+                    'AssetName' = $Difference.InputObject ;
+                    'AssetType' = 'Variable' ;
+                    'AutomationAccountName' = $AutomationAccountName ;
+                    'RepositoryName' = $RepositoryName ;
                 }
-                Catch
-                {
-                    $Exception = New-Exception -Type 'RemoveAzureAutomationAssetFailure' `
-                                                -Message 'Failed to remove an Azure Automation Asset' `
-                                                -Property @{
-                        'ErrorMessage' = (Convert-ExceptionToString -Exception $_) ;
-                        'AssetName' = $Difference.InputObject ;
-                        'AssetType' = 'Schedule' ;
-                        'AutomationAccountName' = $AutomationAccountName ;
-                        'RepositoryName' = $RepositoryName ;
-                    }
-                    Write-Warning -Message $Exception -WarningAction Continue
-                }
+                Write-Warning -Message $Exception -WarningAction Continue
             }
         }
-        else
+
+        # Cleanup empty configurations
+        $AzureAutomationDSCConfiguration = Get-AzureRmAutomationDscConfiguration -ResourceGroupName $ResourceGroupName `
+                                                                                 -AutomationAccountName $AutomationAccountName
+
+        Foreach($_AzureAutomationDSCConfiguration in $AzureAutomationDSCConfiguration)
         {
-            Write-Verbose -Message "[$RepositoryName] No Schedules found in environment for this repository"
+            $NodeConfiguration = Get-AzureRmAutomationDscNodeConfiguration -ConfigurationName $_AzureAutomationDSCConfiguration.Name `
+                                                                           -ResourceGroupName $ResourceGroupName `
+                                                                           -AutomationAccountName $AutomationAccountName
+            if(($NodeConfiguration | Measure-Object).Count -eq 0)
+            {
+                Write-Verbose -Message "Configuration [$($_AzureAutomationDSCConfiguration.Name)] has no node configurations"
+                Remove-AzureRmAutomationDscConfiguration -Name $_AzureAutomationDSCConfiguration.Name `
+                                                         -ResourceGroupName $ResourceGroupName `
+                                                         -AutomationAccountName $AutomationAccountName `
+                                                         -Force
+                Write-Verbose -Message "Removed [$($_AzureAutomationDSCConfiguration.Name)]"
+            }
         }
     }
     Catch
@@ -1173,7 +1146,7 @@ Function Sync-IndividualGitRepositoryToAzureAutomation
         {
             Write-Verbose -Message "Processing [$($RepositoryInformation.CurrentCommit)..$($RepositoryChange.CurrentCommit)]"
             Write-Verbose -Message "RepositoryChange [$($RepositoryChange | ConvertTo-Json)]"
-            $ReturnInformation = Group-RepositoryFile -File $RepositoryChange.Files `
+            $ReturnInformation = Group-AutomationAssetByDescriptionRepository -File $RepositoryChange.Files `
                                                         -Path $_RepositoryInformation.Path `
                                                         -RunbookFolder $RepositoryInformation.RunbookFolder `
                                                         -GlobalsFolder $RepositoryInformation.GlobalsFolder `
