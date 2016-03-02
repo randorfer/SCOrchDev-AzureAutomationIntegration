@@ -1,6 +1,5 @@
 ﻿#requires -Version 3 -Modules SCOrchDev-Exception, SCOrchDev-GitIntegration, SCOrchDev-Utility
 $NunitExe = "$PsScriptRoot\NUnitToHTML\NUnit2Report.Console.exe"
-$gitEXE = "$PsScriptRoot\PortableGit\Bin\git.exe"
 $RepositoryNameRegex = '__RepositoryName:([^;]+);'
 $CurrentCommitRegex = 'CurrentCommit:([^;]+);__'
 
