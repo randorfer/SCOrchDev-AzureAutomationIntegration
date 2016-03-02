@@ -1138,7 +1138,7 @@ Function Sync-IndividualGitRepositoryToAzureAutomation
         {
             Write-Verbose -Message "Processing [$($RepositoryInformation.CurrentCommit)..$($RepositoryChange.CurrentCommit)]"
             Write-Verbose -Message "RepositoryChange [$($RepositoryChange | ConvertTo-Json)]"
-            $ReturnInformation = Group-AutomationAssetByDescriptionRepository -File $RepositoryChange.Files `
+            $ReturnInformation = Group-RepositoryFile -File $RepositoryChange.Files `
                                                         -Path $_RepositoryInformation.Path `
                                                         -RunbookFolder $RepositoryInformation.RunbookFolder `
                                                         -GlobalsFolder $RepositoryInformation.GlobalsFolder `
