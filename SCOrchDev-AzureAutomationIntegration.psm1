@@ -845,14 +845,14 @@ Function Remove-AzureAutomationOrphanDSC
     {
         Connect-AzureRmAccount -Credential $Credential -SubscriptionName $SubscriptionName -Tenant $Tenant
 
-        $AzureAutomationDSCConfiguration = Get-AzureRmAutomationDscConfiguration -ResourceGroupName $ResourceGroupName `
-                                                                                 -AutomationAccountName $AutomationAccountName
+        $AzureAutomationDSCConfiguration = (Get-AzureRmAutomationDscConfiguration -ResourceGroupName $ResourceGroupName `
+                                                                                  -AutomationAccountName $AutomationAccountName).Name
 
-        $DSCNodeConfiguration = Get-GitRepositoryDSCInformation -Path "$($RepositoryInformation.Path)\..\"
+        $DSCConfiguration = Get-GitRepositoryDSCInformation -Path "$($RepositoryInformation.Path)\..\"
 
-        $DSCNodeConfigurationDifferences = Compare-Object -ReferenceObject ($AzureAutomationDSCNodeConfiguration -as [string[]]) `
+        $DSCConfigurationDifferences = Compare-Object -ReferenceObject ($AzureAutomationDSCConfiguration -as [string[]]) `
                                                           -DifferenceObject ($DSCNodeConfiguration  -as [string[]])
-        Foreach($Difference in $DSCNodeConfigurationDifferences)
+        Foreach($Difference in $DSCConfigurationDifferences)
         {
             Try
             {
