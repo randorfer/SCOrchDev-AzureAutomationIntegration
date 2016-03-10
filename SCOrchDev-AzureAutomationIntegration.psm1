@@ -848,15 +848,6 @@ Function Remove-AzureAutomationOrphanDSC
         $AzureAutomationDSCConfiguration = Get-AzureRmAutomationDscConfiguration -ResourceGroupName $ResourceGroupName `
                                                                                  -AutomationAccountName $AutomationAccountName
 
-        $AzureAutomationDSCNodeConfiguration = New-Object -TypeName System.Collections.ArrayList
-        Foreach($_AzureAutomationDSCConfiguration in $AzureAutomationDSCConfiguration)
-        {
-            Get-AzureRmAutomationDscNodeConfiguration -ConfigurationName $_AzureAutomationDSCConfiguration.Name `
-                                                          -ResourceGroupName $ResourceGroupName `
-                                                          -AutomationAccountName $AutomationAccountName | `
-                ForEach-Object { $Null = $AzureAutomationDSCNodeConfiguration.Add($_.Name) }
-        }
-        # No way currently to do tagging on DSC resources...have to check all repositories
         $DSCNodeConfiguration = Get-GitRepositoryDSCInformation -Path "$($RepositoryInformation.Path)\..\"
 
         $DSCNodeConfigurationDifferences = Compare-Object -ReferenceObject ($AzureAutomationDSCNodeConfiguration -as [string[]]) `
@@ -868,17 +859,29 @@ Function Remove-AzureAutomationOrphanDSC
                 if($Difference.SideIndicator -eq '<=')
                 {
                     Write-Verbose -Message "[$($Difference.InputObject)] Does not exist in Source Control"
-                    $Null = Remove-AzureRmAutomationDscNodeConfiguration -Name $Difference.InputObject `
-                                                                         -AutomationAccountName $AutomationAccountName `
-                                                                         -ResourceGroupName $ResourceGroupName `
-                                                                         -Force
+                    $NodeConfiguration = Get-AzureRmAutomationDscNodeConfiguration -ConfigurationName $Difference.InputObject `
+                                                                                   -ResourceGroupName $ResourceGroupName `
+                                                                                   -AutomationAccountName $AutomationAccountName
+                    foreach($_NodeConfiguration in $NodeConfiguration)
+                    {
+                        Write-Verbose -Message "Removing Node Configuration [$($_NodeConfiguration.Name)]"
+                        $Null = Remove-AzureRmAutomationDscNodeConfiguration -Name $_NodeConfiguration.Name `
+                                                                             -ResourceGroupName $ResourceGroupName `
+                                                                             -AutomationAccountName $AutomationAccountName `
+                                                                             -IgnoreNodeMappings `
+                                                                             -Force
+                    }
+                    $Null = Remove-AzureRmAutomationDscConfiguration -Name $Difference.InputObject `
+                                                                     -AutomationAccountName $AutomationAccountName `
+                                                                     -ResourceGroupName $ResourceGroupName `
+                                                                     -Force
                     Write-Verbose -Message "[$($Difference.InputObject)] Removed from Azure Automation"
                 }
             }
             Catch
             {
-                $Exception = New-Exception -Type 'RemoveAzureAutomationDSCNodeConfigurationFailure' `
-                                            -Message 'Failed to remove an Azure Automation DSC Node Configuration' `
+                $Exception = New-Exception -Type 'RemoveAzureAutomationDSCConfigurationFailure' `
+                                            -Message 'Failed to remove an Azure Automation DSC Configuration' `
                                             -Property @{
                     'ErrorMessage' = (Convert-ExceptionToString -Exception $_) ;
                     'AssetName' = $Difference.InputObject ;
@@ -889,31 +892,11 @@ Function Remove-AzureAutomationOrphanDSC
                 Write-Warning -Message $Exception -WarningAction Continue
             }
         }
-
-        # Cleanup empty configurations
-        $AzureAutomationDSCConfiguration = Get-AzureRmAutomationDscConfiguration -ResourceGroupName $ResourceGroupName `
-                                                                                 -AutomationAccountName $AutomationAccountName
-
-        Foreach($_AzureAutomationDSCConfiguration in $AzureAutomationDSCConfiguration)
-        {
-            $NodeConfiguration = Get-AzureRmAutomationDscNodeConfiguration -ConfigurationName $_AzureAutomationDSCConfiguration.Name `
-                                                                           -ResourceGroupName $ResourceGroupName `
-                                                                           -AutomationAccountName $AutomationAccountName
-            if(($NodeConfiguration | Measure-Object).Count -eq 0)
-            {
-                Write-Verbose -Message "Configuration [$($_AzureAutomationDSCConfiguration.Name)] has no node configurations"
-                Remove-AzureRmAutomationDscConfiguration -Name $_AzureAutomationDSCConfiguration.Name `
-                                                         -ResourceGroupName $ResourceGroupName `
-                                                         -AutomationAccountName $AutomationAccountName `
-                                                         -Force
-                Write-Verbose -Message "Removed [$($_AzureAutomationDSCConfiguration.Name)]"
-            }
-        }
     }
     Catch
     {
-        $Exception = New-Exception -Type 'RemoveAzureAutomationOrphanAssetWorkflowFailure' `
-                                   -Message 'Unexpected error encountered in the Remove-AzureAutomationOrphanAsset workflow' `
+        $Exception = New-Exception -Type 'RemoveAzureAutomationOrphanDSCFailure' `
+                                   -Message 'Unexpected error encountered in the Remove-AzureAutomationOrphanDSC' `
                                    -Property @{
             'ErrorMessage' = (Convert-ExceptionToString -Exception $_) ;
             'RepositoryName' = $RepositoryName ;
