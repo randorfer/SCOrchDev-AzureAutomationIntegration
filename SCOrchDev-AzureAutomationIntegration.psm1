@@ -313,7 +313,7 @@ Function Publish-AzureAutomationDSCChange
             $ParameterSet = $DSCInformation.ParameterSet
             $Null = Import-AzureRmAutomationDscConfiguration @ParameterSet
 
-            if($DSCInformation.ConfigurationName -as [bool])
+            if($DSCInformation.ConfigurationData -as [bool])
             {
                 $Null = Start-AzureRmAutomationDscCompilationJob `
                     -ResourceGroupName $ResourceGroupName `
