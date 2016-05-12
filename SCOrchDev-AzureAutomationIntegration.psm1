@@ -1029,7 +1029,11 @@ Function Sync-GitRepositoryToAzureAutomation
 
         [Parameter(Mandatory = $True)]
         [string]
-        $StorageAccountName
+        $StorageAccountName,
+
+        [Parameter(Mandatory = $False)]
+        [string]
+        $SyncTarget = @('localhost')
     )
     
     $CompletedParams = Write-StartingMessage -String $RepositoryName
@@ -1048,7 +1052,8 @@ Function Sync-GitRepositoryToAzureAutomation
                                                                                    -SubscriptionName $SubscriptionName `
                                                                                    -ResourceGroupName $ResourceGroupName `
                                                                                    -Tenant $Tenant `
-                                                                                   -StorageAccountName $StorageAccountName
+                                                                                   -StorageAccountName $StorageAccountName `
+                                                                                   -SyncTarget $SyncTarget
     }
 
     Write-CompletedMessage @CompletedParams
@@ -1096,7 +1101,11 @@ Function Sync-IndividualGitRepositoryToAzureAutomation
 
         [Parameter(Mandatory = $True)]
         [string]
-        $StorageAccountName
+        $StorageAccountName,
+
+        [Parameter(Mandatory = $False)]
+        [string]
+        $SyncTarget = @('localhost')
     )
     
     $CompletedParams = Write-StartingMessage -String "[$RepositoryName] $(ConvertTo-Json -InputObject $RepositoryInformation)"
@@ -1104,15 +1113,20 @@ Function Sync-IndividualGitRepositoryToAzureAutomation
 
     Try
     {
-        $RunbookWorker = Get-AzureAutomationHybridRunbookWorker -HybridWorkerGroup $RepositoryInformation.HybridWorkerGroup
-        # Update the repository on all Workers
-        Invoke-Command -ComputerName $RunbookWorker -Credential $RunbookWorkerAccessCredenial -ScriptBlock {
+        # Update the repository on all sync targets
+        Invoke-Command -ComputerName $SyncTarget -Credential $RunbookWorkerAccessCredenial -ScriptBlock {
             $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
-                    
-            $RepositoryInformation = $Using:RepositoryInformation
-            Update-GitRepository -RepositoryPath $RepositoryInformation.RepositoryPath `
-                                    -Path $RepositoryInformation.Path `
-                                    -Branch $RepositoryInformation.Branch
+            Try
+            {
+                $RepositoryInformation = $Using:RepositoryInformation
+                Update-GitRepository -RepositoryPath $RepositoryInformation.RepositoryPath `
+                                     -Path $RepositoryInformation.Path `
+                                     -Branch $RepositoryInformation.Branch
+            }
+            Catch
+            {
+                Write-Exception -Exception $_ -Stream Warning
+            }
         }
         $RepositoryChange = Find-GitRepositoryChange -Path $RepositoryInformation.Path `
                                                      -StartCommit $RepositoryInformation.CurrentCommit
