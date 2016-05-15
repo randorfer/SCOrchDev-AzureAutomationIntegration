@@ -1032,7 +1032,6 @@ Function Sync-GitRepositoryToAzureAutomation
         $StorageAccountName,
 
         [Parameter(Mandatory = $False)]
-        [string]
         $SyncTarget = @('localhost')
     )
     
@@ -1104,7 +1103,6 @@ Function Sync-IndividualGitRepositoryToAzureAutomation
         $StorageAccountName,
 
         [Parameter(Mandatory = $False)]
-        [string]
         $SyncTarget = @('localhost')
     )
     
