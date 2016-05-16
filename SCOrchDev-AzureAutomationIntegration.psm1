@@ -1009,10 +1009,6 @@ Function Sync-GitRepositoryToAzureAutomation
         
         [Parameter(Mandatory = $True)]
         [string]
-        $RepositoryInformationJSON,
-
-        [Parameter(Mandatory = $True)]
-        [string]
         $AutomationAccountName,
         
         [Parameter(Mandatory = $True)]
@@ -1032,31 +1028,62 @@ Function Sync-GitRepositoryToAzureAutomation
         $StorageAccountName,
 
         [Parameter(Mandatory = $False)]
-        $SyncTarget = @('localhost')
+        $SyncTarget = '["localhost"]',
+
+        [Parameter(Mandatory = $false)]
+        $GitRepositoryCurrentCommit = '{"RunbookExample":"-1","SCOrchDev":"-1"}',
+
+        [Parameter(Mandatory = $False)]
+        $LocalGitRepositoryRoot = 'c:\git'
     )
     
-    $CompletedParams = Write-StartingMessage -String $RepositoryName
+    $CompletedParams = Write-StartingMessage -String $GitRepositoryCurrentCommit
     $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
 
-    $RepositoryInformation = $RepositoryInformationJSON | ConvertFrom-Json | ConvertFrom-PSCustomObject
-    Foreach($RepositoryName in $RepositoryInformation.Keys -as [array])
+    $GitRepositoryCurrentCommit = $GitRepositoryCurrentCommit | ConvertFrom-JSON | ConvertFrom-PSCustomObject
+
+    # Update the DSC configuration (which will cause all modules to be updated)
+    Try
     {
-        $_RepositoryInformation = $RepositoryInformation.$RepositoryName
-        $RepositoryInformationJSON = Sync-IndividualGitRepositoryToAzureAutomation -RepositoryInformation $_RepositoryInformation `
-                                                                                   -RepositoryName $RepositoryName `
-                                                                                   -RepositoryInformationJSON $RepositoryInformationJSON `
-                                                                                   -SubscriptionAccessCredential $SubscriptionAccessCredential `
-                                                                                   -RunbookWorkerAccessCredenial $RunbookWorkerAccessCredenial `
-                                                                                   -AutomationAccountName $AutomationAccountName `
-                                                                                   -SubscriptionName $SubscriptionName `
-                                                                                   -ResourceGroupName $ResourceGroupName `
-                                                                                   -Tenant $Tenant `
-                                                                                   -StorageAccountName $StorageAccountName `
-                                                                                   -SyncTarget $SyncTarget
+        Start-DscConfiguration -UseExisting `
+                               -Wait `
+                               -Force
+    }
+    Catch
+    {
+        Write-Exception -Exception $_ -Stream Warning
+    }
+    
+    Try
+    {
+        # Update the DSC on all remote machines as well
+        Start-DscConfiguration -ComputerName ($SyncTarget | ConvertFrom-Json) `
+                               -Credential $RunbookWorkerAccessCredenial `
+                               -UseExisting `
+                               -Wait `
+                               -Force
+    }
+    Catch
+    {
+        Write-Exception -Exception $_ -Stream Warning
+    }
+    
+    Foreach($RepositoryName in ($GitRepositoryCurrentCommit.Keys -as [array]))
+    {
+        $CurrentCommit = Sync-IndividualGitRepositoryToAzureAutomation -RepositoryName $RepositoryName `
+                                                                       -SubscriptionAccessCredential $SubscriptionAccessCredential `
+                                                                       -AutomationAccountName $AutomationAccountName `
+                                                                       -SubscriptionName $SubscriptionName `
+                                                                       -ResourceGroupName $ResourceGroupName `
+                                                                       -Tenant $Tenant `
+                                                                       -StorageAccountName $StorageAccountName `
+                                                                       -LocalGitRepositoryRoot $LocalGitRepositoryRoot `
+                                                                       -CurrentCommit $GitRepositoryCurrentCommit.$RepositoryName
+        $GitRepositoryCurrentCommit.$RepositoryName = $CurrentCommit
     }
 
     Write-CompletedMessage @CompletedParams
-    Return (Select-FirstValid -Value @($UpdatedRepositoryInformation, $RepositoryInformationJSON))
+    Return ($GitRepositoryCurrentCommit | ConvertTo-JSON) -as [string]
 }
 <#
 #>
@@ -1066,17 +1093,6 @@ Function Sync-IndividualGitRepositoryToAzureAutomation
         [Parameter(Mandatory = $True)]
         [pscredential]
         $SubscriptionAccessCredential,
-
-        [Parameter(Mandatory = $True)]
-        [pscredential]
-        $RunbookWorkerAccessCredenial,
-        
-        [Parameter(Mandatory = $True)]
-        $RepositoryInformation,
-
-        [Parameter(Mandatory = $True)]
-        [string]
-        $RepositoryInformationJSON,
 
         [Parameter(Mandatory = $True)]
         [string]
@@ -1103,42 +1119,33 @@ Function Sync-IndividualGitRepositoryToAzureAutomation
         $StorageAccountName,
 
         [Parameter(Mandatory = $False)]
-        $SyncTarget = @('localhost')
+        [string]
+        $LocalGitRepositoryRoot = 'c:\git',
+
+        [Parameter(Mandatory = $True)]
+        [string]
+        $CurrentCommit
     )
     
-    $CompletedParams = Write-StartingMessage -String "[$RepositoryName] $(ConvertTo-Json -InputObject $RepositoryInformation)"
+    $CompletedParams = Write-StartingMessage -String $RepositoryName
     $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
 
     Try
     {
-        # Update the repository on all sync targets
-        Invoke-Command -ComputerName $SyncTarget -Credential $RunbookWorkerAccessCredenial -ScriptBlock {
-            $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
-            Try
-            {
-                $RepositoryInformation = $Using:RepositoryInformation
-                Update-GitRepository -RepositoryPath $RepositoryInformation.RepositoryPath `
-                                     -Path $RepositoryInformation.Path `
-                                     -Branch $RepositoryInformation.Branch
-            }
-            Catch
-            {
-                Write-Exception -Exception $_ -Stream Warning
-            }
-        }
-        $RepositoryChange = Find-GitRepositoryChange -Path $RepositoryInformation.Path `
-                                                     -StartCommit $RepositoryInformation.CurrentCommit
+        $Path = "$($LocalGitRepositoryRoot)\$($RepositoryName)"
+        $RepositoryChange = Find-GitRepositoryChange -Path $Path `
+                                                     -StartCommit $CurrentCommit
             
-        if(-not ($RepositoryChange.CurrentCommit -as [string]).Equals($RepositoryInformation.CurrentCommit -as [string]))
+        if(-not ($RepositoryChange.CurrentCommit -as [string]).Equals($CurrentCommit -as [string]))
         {
-            Write-Verbose -Message "Processing [$($RepositoryInformation.CurrentCommit)..$($RepositoryChange.CurrentCommit)]"
+            Write-Verbose -Message "Processing [$($CurrentCommit)..$($RepositoryChange.CurrentCommit)]"
             Write-Verbose -Message "RepositoryChange [$($RepositoryChange | ConvertTo-Json)]"
             $ReturnInformation = Group-RepositoryFile -File $RepositoryChange.Files `
-                                                        -Path $_RepositoryInformation.Path `
-                                                        -RunbookFolder $RepositoryInformation.RunbookFolder `
-                                                        -GlobalsFolder $RepositoryInformation.GlobalsFolder `
-                                                        -PowerShellModuleFolder $RepositoryInformation.PowerShellModuleFolder `
-                                                        -DSCFolder $RepositoryInformation.DSCFolder
+                                                        -Path $Path `
+                                                        -RunbookFolder 'Runbooks' `
+                                                        -GlobalsFolder 'Globals' `
+                                                        -PowerShellModuleFolder 'PowerShellModules' `
+                                                        -DSCFolder 'DSC'
 
             Foreach($SettingsFilePath in $ReturnInformation.SettingsFiles)
             {
@@ -1219,10 +1226,6 @@ Function Sync-IndividualGitRepositoryToAzureAutomation
                                                 -Tenant $Tenant
             }
 
-            $UpdatedRepositoryInformation = (Update-RepositoryInformationCommitVersion -RepositoryInformationJSON $RepositoryInformationJSON `
-                                                                                        -RepositoryName $RepositoryName `
-                                                                                        -Commit $RepositoryChange.CurrentCommit) -as [string]
-
             Write-Verbose -Message "Finished Processing [$($_RepositoryInformation.CurrentCommit)..$($RepositoryChange.CurrentCommit)]"
         }
     }
@@ -1232,91 +1235,7 @@ Function Sync-IndividualGitRepositoryToAzureAutomation
     }
 
     Write-CompletedMessage @CompletedParams
-    Return (Select-FirstValid -Value @($UpdatedRepositoryInformation, $RepositoryInformationJSON))
-}
-<#
-    .Synopsis
-        Invokes test suites on the Runbooks and PowerShell modules
-#>
-Function Invoke-IntegrationTest
-{
-    Param(
-        [Parameter(
-            Mandatory = $True,
-            Position = 0,
-            ValueFromPipeline = $True
-        )]
-        [string[]]
-        $Path
-    )
-    $ErrorActionPreference = [System.Management.Automation.ActionPreference]::Stop
-    $CompletedParams = Write-StartingMessage -String $($Path -join ';')
-    $Result = @{}
-    Try
-    {
-        if((Get-Module -Name Pester -ListAvailable) -as [bool])
-        {
-            $TempDirectory = New-TempDirectory
-            Try
-            {
-                Foreach($_Path in $Path)
-                {
-                    Write-Verbose -Message $_Path
-                    $Item = Get-Item -Path $_Path
-                    if(-not ($item.PSIsContainer))
-                    {
-                        $Item = $Item.Directory
-                    }
-                    $TestFiles = Get-ChildItem -Path $Item.FullName -Include *.tests.ps1 -Recurse
-                    
-                    if($TestFiles -as [bool])
-                    {
-                        $ReportPath = "$TempDirectory\$($Item.Name).xml"
-                        Invoke-Pester $Item.FullName -OutputFile $ReportPath -OutputFormat NUnitXml -Quiet
-                    }
-                }
-                $CurrentDirectory = $PWD
-                Try
-                {
-                    Set-Location -Path "$PsScriptRoot\NUnitToHTML"
-                    $XMLFiles = Get-ChildItem -Path $TempDirectory -Filter *.xml
-                    foreach($XMLFile in $XMLFiles)
-                    {
-                        $OutputFile = "$($TempDirectory.FullName)\$($XmlFile.Name)"
-                        Write-Verbose -Message "$NunitEXE --fileset='$($XMLFile.FullName)' -o $OutputFile"
-                        Invoke-Expression -Command "$NunitEXE --fileset='$($XMLFile.FullName)' -o $($TempDirectory.FullName)\$($XmlFile.Name)"
-                        $Null = $Result.Add($XmlFile.Name, ((Get-Content $OutputFile) -as [string]))
-                    }
-                }
-                Finally
-                {
-                    Set-Location $PWD
-                }
-            }
-            Finally
-            {
-              Remove-Item -Path $TempDirectory -Force -Recurse
-            }
-            
-        }
-        <#
-        if((Get-Module -Name PSScriptAnalyzer -ListAvailable) -as [bool])
-        {
-            $Result.PSScriptAnalyzer = New-Object -TypeName System.Collections.ArrayList
-            $ChildItem = Get-ChildItem -Path $Path -Recurse -Include *.ps1,*.psm1 -Exclude *.tests.ps1
-            $ChildItem | ForEach-Object {
-                $AnalyzerResult = Invoke-ScriptAnalyzer -Path $_.FullName
-                $Null = $Result.PSScriptAnalyzer.Add(@{'FileName' = $_.FullName ; 'AnalyzerResult' = Select-FirstValid -Value ($AnalyzerResult,'Passing') })
-            }
-        }#>
-    }
-    Catch
-    {
-        Write-Exception -Exception $_ -Stream Warning
-    }
-
-    Write-CompletedMessage @CompletedParams
-    Return $Result
+    Return (Select-FirstValid -Value @($RepositoryChange.CurrentCommit, '-1'))
 }
 <#
     .Synopsis
@@ -1509,7 +1428,7 @@ Function Test-AzureAutomationModuleExist
     }
 
     Write-CompletedMessage @CompletedParams
-    return $Module -as [bool]
+    return $AutomationModule -as [bool]
 }
 
 Function Test-AzureAutomationGlobalExist
